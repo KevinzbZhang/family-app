@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HappyHome 家庭任务 (优化版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
+    
+    <style>
+        /* 整体美学调整：更柔和的背景和阴影 */
+        body { background-color: #f7f3f9; } 
+        .shadow-premium { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05); }
+        .transition-all { transition-property: all; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 300ms; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        
+        /* 星星爆发动画 */
+        @keyframes star-fade-out {
+            0% { transform: scale(0.5) rotate(0deg); opacity: 1; }
+            50% { transform: scale(1.5) rotate(10deg); opacity: 0.8; }
+            100% { transform: scale(3) rotate(30deg); opacity: 0; }
+        }
+        .star-burst {
+            animation: star-fade-out 0.8s ease-out forwards;
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 9999; pointer-events: none;
+        }
+        
+        /* 恭喜动画 */
+        @keyframes congratulate {
+            0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+            50% { transform: scale(1.2) rotate(10deg); opacity: 1; }
+            70% { transform: scale(0.9) rotate(-5deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        @keyframes confetti-fall {
+            0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        .congratulate-popup {
+            animation: congratulate 0.6s ease-out forwards;
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 9999; pointer-events: none;
+        }
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            z-index: 9998;
+            animation: confetti-fall 3s linear forwards;
+        }
+        /* 曲线图样式 */
+        .chart-grid line { stroke: #e5e7eb; stroke-width: 1; }
+        .chart-label { font-size: 10px; fill: #6b7280; }
+        .chart-line { fill: none; stroke-width: 3; }
+        /* 图标修复：补充一个圆圈和打钩图标 */
+        .icon-check-circle { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+
+    <div class="border-blue-500 border-pink-500 border-green-500 bg-blue-500 bg-pink-500 bg-green-500 text-blue-600 text-pink-600 text-green-600 border-red-500 bg-red-500 text-red-600 hidden"></div>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        const { useState, createElement, useMemo } = React;
+
+        // --- 1. 图标组件 (完整修复版) ---
+        const Icon = ({ children, className, fill = "none" }) => (
+            createElement('svg', { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", viewBox: "0 0 24 24", fill: fill, stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", className: className }, children)
+        );
+        const Icons = {
+            Home: (props) => createElement(Icon, props, createElement('path', { d: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"}), createElement('polyline', { points: "9 22 9 12 15 12 15 22"})),
+            Calendar: (props) => createElement(Icon, props, createElement('rect', { x: "3", y: "4", width: "18", height: "18", rx: "2", ry: "2"}), createElement('line', { x1: "16", y1: "2", x2: "16", y2: "6"}), createElement('line', { x1: "8", y1: "2", x2: "8", y2: "6"}), createElement('line', { x1: "3", y1: "10", x2: "21", y2: "10"})),
+            Trophy: (props) => createElement(Icon, props, createElement('path', { d: "M8 21h8"}), createElement('path', { d: "M12 17v-5a6 6 0 0 0-6-6v-2h12v2a6 6 0 0 0-6 6v5"})), 
+            Chart: (props) => createElement(Icon, props, createElement('line', { x1: "18", y1: "20", x2: "18", y2: "10"}), createElement('line', { x1: "12", y1: "20", x2: "12", y2: "4"}), createElement('line', { x1: "6", y1: "20", x2: "6", y2: "14"})),
+            Star: (props) => createElement(Icon, {...props, fill: props.fill || "none"}, createElement('polygon', { points: "12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})),
+            Plus: (props) => createElement(Icon, props, createElement('line', { x1: "12", y1: "5", x2: "12", y2: "19"}), createElement('line', { x1: "5", y1: "12", x2: "19", y2: "12"})),
+            Edit: (props) => createElement(Icon, props, createElement('path', { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}), createElement('path', { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})),
+            UserPlus: (props) => createElement(Icon, props, createElement('path', { d: "M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"}), createElement('circle', { cx: "8.5", cy: "7", r: "4"}), createElement('line', { x1: "20", y1: "8", x2: "20", y2: "14"}), createElement('line', { x1: "23", y1: "11", x2: "17", y2: "11"})),
+            Users: (props) => createElement(Icon, props, createElement('path', { d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"}), createElement('circle', { cx: "9", cy: "7", r: "4"}), createElement('path', { d: "M23 21v-2a4 4 0 0 0-3-3.87"}), createElement('path', { d: "M16 3.13a4 4 0 0 1 0 7.75"})),
+            Trash: (props) => createElement(Icon, props, createElement('polyline', { points: "3 6 5 6 21 6"}), createElement('path', { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"})),
+            List: (props) => createElement(Icon, props, createElement('line', { x1: "8", y1: "6", x2: "21", y2: "6"}), createElement('line', { x1: "8", y1: "12", x2: "21", y2: "12"}), createElement('line', { x1: "8", y1: "18", x2: "21", y2: "18"}), createElement('line', { x1: "3", y1: "6", x2: "3.01", y2: "6"}), createElement('line', { x1: "3", y1: "12", x2: "3.01", y2: "12"}), createElement('line', { x1: "3", y1: "18", x2: "3.01", y2: "18"})),
+            CheckCircle: (props) => createElement(Icon, {...props, fill: props.fill || "none"}, createElement('path', { d: "M22 11.08V12a10 10 0 1 1-5.93-9.14"}), createElement('polyline', { points: "22 4 12 14.01 9 11.01"})),
+            Circle: (props) => createElement(Icon, props, createElement('circle', { cx: "12", cy: "12", r: "10" })),
+            ChevronLeft: (props) => createElement(Icon, props, createElement('polyline', { points: "15 18 9 12 15 6" })),
+            ChevronRight: (props) => createElement(Icon, props, createElement('polyline', { points: "9 18 15 12 9 6" })),
+            ChevronUp: (props) => createElement(Icon, props, createElement('polyline', { points: "18 15 12 9 6 15" })),
+            ChevronDown: (props) => createElement(Icon, props, createElement('polyline', { points: "6 9 12 15 18 9" })),
+            X: (props) => createElement(Icon, props, createElement('line', { x1: "18", y1: "6", x2: "6", y2: "18"}), createElement('line', { x1: "6", y1: "6", x2: "18", y2: "18"})),
+            Clock: (props) => createElement(Icon, props, createElement('circle', { cx: "12", cy: "12", r: "10" }), createElement('polyline', { points: "12 6 12 12 16 14"})),
+        };
+
+
+        // --- 2. 模拟初始数据 (简化角色) ---
+        const INITIAL_MEMBERS = [
+            { id: 'm1', name: '爸爸', color: 'bg-blue-500', text: 'text-blue-600', border: 'border-blue-500', stars: 10, avatar: '👨' },
+            { id: 'm2', name: '妈妈', color: 'bg-pink-500', text: 'text-pink-600', border: 'border-pink-500', stars: 5, avatar: '👩' },
+            { id: 'm3', name: '桃桃', color: 'bg-red-500', text: 'text-red-600', border: 'border-red-500', stars: 12, avatar: '👧' },
+        ];
+        const INITIAL_TASKS = [
+            { id: 't1', title: '起床洗漱', assignedTo: 'm3', date: '2025-11-26', completed: false, stars: 1, priority: 'high', icon: '🪥', taskColor: 'bg-red-100', type: 'individual' },
+            { id: 't2', title: '做作业', assignedTo: 'm3', date: '2025-11-25', completed: true, stars: 1, priority: 'medium', icon: '📒', taskColor: 'bg-green-100', type: 'individual', completedAt: '2025-11-25' },
+            { id: 't3', title: '洗碗', assignedTo: 'm1', date: '2025-11-26', completed: false, stars: 1, priority: 'low', icon: '💧', taskColor: 'bg-blue-100', type: 'individual' },
+            { id: 't4', title: '整理客厅 (竞争)', assignedTo: 'm2', date: '2025-11-27', completed: false, stars: 5, priority: 'high', icon: '🏆', taskColor: 'bg-yellow-100', type: 'competition', competitors: ['m2', 'm3'] },
+            { id: 't5', title: '周末大扫除', assignedTo: 'm1', date: '2025-11-23', completed: true, stars: 2, priority: 'low', icon: '🧹', taskColor: 'bg-blue-100', type: 'individual', completedAt: '2025-11-23' },
+            { id: 't6', title: '购买食材', assignedTo: 'm2', date: '2025-11-24', completed: true, stars: 1, priority: 'medium', icon: '🛒', taskColor: 'bg-pink-100', type: 'individual', completedAt: '2025-11-24' },
+            // 更多历史数据用于曲线图演示
+            { id: 't7', title: '倒垃圾', assignedTo: 'm3', date: '2025-11-22', completed: true, stars: 1, icon: '🗑️', taskColor: 'bg-red-100', type: 'individual', completedAt: '2025-11-22' },
+            { id: 't8', title: '遛狗', assignedTo: 'm3', date: '2025-11-23', completed: true, stars: 1, icon: '🐕', taskColor: 'bg-red-100', type: 'individual', completedAt: '2025-11-23' },
+            { id: 't9', title: '铺床', assignedTo: 'm2', date: '2025-11-23', completed: true, stars: 1, icon: '🛌', taskColor: 'bg-pink-100', type: 'individual', completedAt: '2025-11-23' },
+            { id: 't10', title: '修水龙头', assignedTo: 'm1', date: '2025-11-25', completed: true, stars: 3, icon: '🔧', taskColor: 'bg-blue-100', type: 'individual', completedAt: '2025-11-25' },
+        ];
+        const INITIAL_REWARDS = [
+            { id: 'r1', name: '看动画片 30分钟', cost: 5, assignedTo: 'm3', icon: '📺', progress: 3 },
+            { id: 'r2', name: '3D打印机娃娃一个任选', cost: 10, assignedTo: 'm3', icon: '🧸', progress: 1 },
+            { id: 'r3', name: '户外探险一次', cost: 50, assignedTo: 'm1', icon: '⛰️', progress: 0 },
+            { id: 'r4', name: '买新包包', cost: 200, assignedTo: 'm2', icon: '👜', progress: 0 },
+        ];
+
+        // --- 3. 辅助函数：日期与统计 ---
+        const getStartOfWeek = (dateStr) => {
+            const date = new Date(dateStr);
+            const day = date.getDay(); // 0 for Sunday, 6 for Saturday
+            const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+            const startOfWeek = new Date(date.setDate(diff));
+            return startOfWeek.toISOString().slice(0, 10);
+        };
+        const getDatesInWeek = (startOfWeekStr) => {
+            const dates = [];
+            const current = new Date(startOfWeekStr);
+            for (let i = 0; i < 7; i++) {
+                dates.push(current.toISOString().slice(0, 10));
+                current.setDate(current.getDate() + 1);
+            }
+            return dates;
+        };
+
+        // --- 4. 统计视图核心组件：SVG 曲线图 ---
+        const LineChart = ({ data, color, width, height }) => {
+            const padding = 20;
+            const innerWidth = width - 2 * padding;
+            const innerHeight = height - 2 * padding;
+
+            const values = data.map(d => d.value);
+            const maxVal = Math.max(...values, 1);
+
+            const points = values.map((val, index) => {
+                const x = padding + (index / (data.length - 1)) * innerWidth;
+                const y = padding + innerHeight * (1 - (val / maxVal));
+                return { x, y, value: val, label: data[index].label };
+            });
+
+            let pathD = `M ${points[0].x} ${points[0].y}`;
+            for (let i = 0; i < points.length - 1; i++) {
+                const p0 = points[i];
+                const p1 = points[i + 1];
+                const cp1x = p0.x + (p1.x - p0.x) / 2;
+                const cp1y = p0.y;
+                const cp2x = p0.x + (p1.x - p0.x) / 2;
+                const cp2y = p1.y;
+                pathD += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p1.x} ${p1.y}`;
+            }
+
+            const gridLines = [];
+            const yTicks = [0, Math.floor(maxVal / 2), maxVal].filter((v, i, arr) => arr.indexOf(v) === i && v >= 0);
+
+            yTicks.forEach(tick => {
+                const y = padding + innerHeight * (1 - (tick / maxVal));
+                gridLines.push(createElement('line', { key: `y-${tick}`, x1: padding, y1: y, x2: width - padding, y2: y, className: "chart-grid" }));
+                gridLines.push(createElement('text', { key: `y-label-${tick}`, x: padding - 5, y: y + 3, textAnchor: "end", className: "chart-label" }, tick));
+            });
+            
+            const xLabels = points.map((p, i) => createElement('text', {
+                key: `x-label-${i}`, x: p.x, y: height - 5, textAnchor: "middle", className: "chart-label"
+            }, p.label));
+
+            return createElement('svg', { width, height, className: "bg-white rounded-lg shadow-inner" },
+                // Y 轴和 X 轴
+                createElement('line', { x1: padding, y1: padding, x2: padding, y2: height - padding, stroke: "#6b7280" }),
+                createElement('line', { x1: padding, y1: height - padding, x2: width - padding, y2: height - padding, stroke: "#6b7280" }),
+                
+                // 网格线和标签
+                ...gridLines,
+                ...xLabels,
+
+                // 曲线
+                createElement('path', { d: pathD, className: "chart-line", stroke: color }),
+                
+                // 数据点圆圈
+                points.map((p, i) => createElement('circle', { 
+                    key: `c-${i}`, cx: p.x, cy: p.y, r: 4, 
+                    fill: color, stroke: "white", strokeWidth: 2 
+                }))
+            );
+        };
+
+
+        // --- 5. 统计视图 (StatsView) - 添加成员排名 ---
+        const StatsView = ({ tasks, members, getMemberById }) => {
+            const today = '2025-11-26';
+            const [selectedRange, setSelectedRange] = useState('week');
+            const [selectedMemberId, setSelectedMemberId] = useState('all');
+
+            const filteredTasks = useMemo(() => {
+                let currentTasks = tasks.filter(t => t.completed); 
+                
+                const startOfWeekStr = getStartOfWeek(today);
+                const datesInWeek = getDatesInWeek(startOfWeekStr);
+                
+                if (selectedRange === 'week') {
+                    currentTasks = currentTasks.filter(t => t.completedAt && datesInWeek.includes(t.completedAt));
+                }
+
+                if (selectedMemberId !== 'all') {
+                    currentTasks = currentTasks.filter(t => t.assignedTo === selectedMemberId);
+                }
+                
+                return currentTasks;
+            }, [tasks, selectedRange, selectedMemberId, today]);
+
+            const chartData = useMemo(() => {
+                const startOfWeekStr = getStartOfWeek(today);
+                const dates = getDatesInWeek(startOfWeekStr);
+                
+                const dataMap = dates.map(date => ({
+                    label: date.slice(5),
+                    value: 0,
+                    date: date
+                }));
+                
+                filteredTasks.forEach(t => {
+                    const index = dataMap.findIndex(d => d.date === t.completedAt);
+                    if (index !== -1) {
+                        dataMap[index].value += 1;
+                    }
+                });
+                
+                return dataMap;
+            }, [filteredTasks, today]);
+
+            const totalCompleted = filteredTasks.length;
+            const totalStars = filteredTasks.reduce((sum, t) => sum + t.stars, 0);
+
+            // 成员排名
+            const memberRanking = useMemo(() => {
+                return members
+                    .map(m => {
+                        const memberTasks = tasks.filter(t => t.assignedTo === m.id && t.completed);
+                        return {
+                            ...m,
+                            completedCount: memberTasks.length,
+                            earnedStars: memberTasks.reduce((sum, t) => sum + t.stars, 0)
+                        };
+                    })
+                    .sort((a, b) => b.earnedStars - a.earnedStars);
+            }, [members, tasks]);
+
+            const memberSelector = [
+                { id: 'all', name: '全部', avatar: '🏠' },
+                ...members
+            ].map(m => createElement('button', {
+                key: m.id,
+                onClick: () => setSelectedMemberId(m.id),
+                className: `px-3 py-1 rounded-full text-sm font-medium transition flex items-center gap-2 ${selectedMemberId === m.id ? `bg-purple-600 text-white shadow-md` : 'bg-gray-100 text-gray-700'}`
+            }, m.avatar, m.name));
+
+            return createElement('div', { className: "p-4 pb-20 space-y-6" },
+                createElement('h2', { className: "text-2xl font-bold text-gray-800 flex items-center gap-2" }, 
+                    createElement(Icons.Chart, { className: "w-7 h-7 text-purple-600" }),
+                    '任务完成统计'
+                ),
+                
+                // 成员筛选
+                createElement('div', { className: "flex space-x-3 overflow-x-auto pb-4 scrollbar-hide" }, ...memberSelector),
+                
+                // 时间筛选
+                createElement('div', { className: "flex gap-3 text-sm font-medium" },
+                    createElement('button', { onClick: () => setSelectedRange('week'), className: `px-4 py-2 rounded-full transition ${selectedRange === 'week' ? 'bg-indigo-500 text-white' : 'bg-white text-gray-700 border'}` }, '本周'),
+                    createElement('button', { onClick: () => setSelectedRange('month'), disabled: true, className: `px-4 py-2 rounded-full transition bg-white text-gray-400 border` }, '本月 (待开发)'),
+                ),
+
+                // 汇总指标
+                createElement('div', { className: "grid grid-cols-2 gap-4" },
+                    createElement('div', { className: "bg-white p-4 rounded-xl shadow-premium border-l-4 border-indigo-500" }, 
+                        createElement('p', { className: "text-sm text-gray-600" }, '完成任务数'),
+                        createElement('p', { className: "text-3xl font-bold text-indigo-700" }, totalCompleted)
+                    ),
+                    createElement('div', { className: "bg-white p-4 rounded-xl shadow-premium border-l-4 border-yellow-500" }, 
+                        createElement('p', { className: "text-sm text-gray-600" }, '获得星星数'),
+                        createElement('div', { className: "flex items-center text-3xl font-bold text-yellow-600" }, totalStars, createElement(Icons.Star, { className: "w-7 h-7 ml-1 fill-current" }))
+                    )
+                ),
+
+                // 成员排名榜
+                createElement('div', { className: "bg-white p-4 rounded-xl shadow-premium" },
+                    createElement('h3', { className: "text-xl font-bold mb-4 flex items-center gap-2" }, 
+                        createElement(Icons.Trophy, { className: "w-6 h-6 text-yellow-600" }),
+                        '成员排行榜'
+                    ),
+                    createElement('div', { className: "space-y-3" },
+                        memberRanking.map((m, index) => {
+                            const medals = ['🥇', '🥈', '🥉'];
+                            return createElement('div', { 
+                                key: m.id, 
+                                className: `flex items-center justify-between p-3 rounded-lg ${index === 0 ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50'}` 
+                            },
+                                createElement('div', { className: "flex items-center gap-3" },
+                                    createElement('span', { className: "text-2xl font-bold w-8" }, medals[index] || `${index + 1}`),
+                                    createElement('div', { className: `w-10 h-10 rounded-full flex items-center justify-center text-xl ${m.color}` }, m.avatar),
+                                    createElement('div', null,
+                                        createElement('p', { className: "font-bold text-gray-800" }, m.name),
+                                        createElement('p', { className: "text-xs text-gray-500" }, `完成 ${m.completedCount} 个任务`)
+                                    )
+                                ),
+                                createElement('div', { className: "flex items-center gap-2 text-yellow-600 font-bold text-lg" },
+                                    createElement(Icons.Star, { className: "w-5 h-5 fill-current" }),
+                                    m.earnedStars
+                                )
+                            );
+                        })
+                    )
+                ),
+
+                // 曲线图
+                createElement('div', { className: "bg-white p-4 rounded-xl shadow-premium" },
+                    createElement('h3', { className: "text-xl font-bold mb-4" }, '每周任务完成趋势'),
+                    createElement(LineChart, { data: chartData, color: "#8b5cf6", width: 350, height: 200 })
+                ),
+                
+                // 具体完成任务列表
+                createElement('h3', { className: "text-xl font-bold border-b pb-2 mt-4" }, '任务完成记录'),
+                filteredTasks.length > 0 ? filteredTasks.map(t => createElement('div', { key: t.id, className: "bg-white p-3 rounded-lg shadow-sm flex justify-between items-center mb-2 border-l-4 border-green-500" },
+                    createElement('div', { className: "flex items-center gap-2" },
+                        createElement('span', { className: "text-xl" }, t.icon),
+                        createElement('p', { className: "font-medium" }, t.title)
+                    ),
+                    createElement('div', { className: "text-xs text-gray-500 text-right" },
+                        createElement('p', { className: "text-yellow-600 font-bold flex items-center" }, createElement(Icons.Star, { className: "w-3 h-3 mr-0.5 fill-current" }), t.stars),
+                        createElement('p', null, t.completedAt)
+                    )
+                )) : createElement('p', {className: 'text-gray-500 text-center py-5'}, '本周暂无记录')
+            );
+        };
+        
+        // --- 6. 成员管理视图 (MembersView) ---
+        const MembersView = ({ members, handleEditMemberStart, handleDeleteMember, handleAddMember }) => {
+            const renderMemberCard = (member) => {
+                return createElement('div', { 
+                    key: member.id, 
+                    className: `bg-white p-5 rounded-xl shadow-premium border-l-4 ${member.border} mb-4`
+                },
+                    createElement('div', { className: "flex items-center justify-between" },
+                        createElement('div', { className: "flex items-center gap-4" },
+                            createElement('div', { className: `w-16 h-16 rounded-full flex items-center justify-center text-3xl ${member.color}` }, member.avatar),
+                            createElement('div', null,
+                                createElement('h3', { className: "text-lg font-bold text-gray-800" }, member.name),
+                                createElement('div', { className: "flex items-center gap-2 text-yellow-600 mt-1" },
+                                    createElement(Icons.Star, { className: "w-4 h-4 fill-current" }),
+                                    createElement('span', { className: "font-medium" }, `${member.stars} 颗星星`)
+                                )
+                            )
+                        ),
+                        createElement('div', { className: "flex gap-2" },
+                            createElement('button', { 
+                                onClick: () => handleEditMemberStart(member), 
+                                className: "p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition flex items-center justify-center" 
+                            }, createElement(Icons.Edit, { className: "w-5 h-5" })),
+                            createElement('button', { 
+                                onClick: () => handleDeleteMember(member.id, member.name), 
+                                className: "p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition flex items-center justify-center" 
+                            }, createElement(Icons.Trash, { className: "w-5 h-5" }))
+                        )
+                    )
+                );
+            };
+
+            return createElement('div', { className: "pb-20" },
+                createElement('div', { className: "flex justify-between items-center mb-6" },
+                    createElement('div', { className: "flex items-center gap-2" },
+                        createElement(Icons.Users, { className: "w-7 h-7 text-purple-600" }),
+                        createElement('h2', { className: "text-2xl font-bold text-gray-800" }, '家庭成员')
+                    ),
+                    createElement('button', { 
+                        onClick: handleAddMember, 
+                        className: "flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg shadow-md hover:bg-purple-700 transition" 
+                    },
+                        createElement(Icons.UserPlus, { className: "w-5 h-5" }),
+                        '添加成员'
+                    )
+                ),
+                createElement('div', { className: "space-y-3" },
+                    members.length > 0 
+                        ? members.map(renderMemberCard)
+                        : createElement('p', { className: 'text-gray-500 text-center py-10' }, '还没有成员，点击上方按钮添加吧！')
+                )
+            );
+        };
+
+        // --- 7. 日历选择器组件(可收起版) ---
+        const DateSelector = ({ selectedDate, setSelectedDate, tasks }) => {
+            const [currentMonthOffset, setCurrentMonthOffset] = useState(0);
+            const [isExpanded, setIsExpanded] = useState(true);
+            
+            const today = new Date('2025-11-26');
+            const displayDate = new Date(today.getFullYear(), today.getMonth() + currentMonthOffset, 1);
+            const year = displayDate.getFullYear();
+            const month = displayDate.getMonth() + 1;
+            
+            const formatDate = (y, m, day) => {
+                const monthStr = m < 10 ? '0' + m : m;
+                const dayStr = day < 10 ? '0' + day : day;
+                return `${y}-${monthStr}-${dayStr}`;
+            };
+            
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
+            
+            // 修复:周日应该在最后,所以调整为0时变成7
+            const adjustedFirstDay = firstDayOfWeek === 0 ? 7 : firstDayOfWeek;
+            
+            const days = [];
+            // 添加空白占位(周一到周日,周一索引1)
+            for (let i = 1; i < adjustedFirstDay; i++) {
+                days.push(createElement('div', { key: `empty-${i}` }));
+            }
+            
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = formatDate(year, month, day);
+                const isToday = dateStr === '2025-11-26';
+                const isSelected = dateStr === selectedDate;
+                const dayTasks = tasks.filter(t => t.date === dateStr);
+                const taskCount = dayTasks.length;
+                const allCompleted = taskCount > 0 && dayTasks.every(t => t.completed);
+
+                const cardClass = isSelected 
+                    ? 'bg-purple-600 text-white font-bold' 
+                    : isToday 
+                        ? 'bg-green-100 text-green-700 font-medium border border-green-400' 
+                        : 'hover:bg-gray-100 text-gray-700';
+
+                days.push(createElement('button', { 
+                    key: day, 
+                    onClick: () => setSelectedDate(dateStr), 
+                    className: `h-10 rounded-lg flex flex-col items-center justify-center relative transition-all ${cardClass}` 
+                },
+                    createElement('span', { className: `text-xs` }, day),
+                    taskCount > 0 && createElement('div', { className: `w-1 h-1 rounded-full mt-0.5 ${isSelected ? 'bg-white' : allCompleted ? 'bg-green-500' : 'bg-gray-400'}` })
+                ));
+            }
+            
+            // 今天按钮点击:回到当前月份并选择今天
+            const handleTodayClick = () => {
+                setCurrentMonthOffset(0);
+                setSelectedDate('2025-11-26');
+            };
+
+            return createElement('div', { className: "bg-white rounded-xl shadow-premium p-4 mb-4" },
+                createElement('div', { className: "flex justify-between items-center mb-3" },
+                    createElement('div', { className: "flex items-center gap-2" },
+                        createElement(Icons.Calendar, { className: "w-5 h-5 text-purple-600" }),
+                        createElement('h3', { className: "text-base font-bold text-gray-800" }, `${year}年 ${month}月`)
+                    ),
+                    createElement('div', { className: "flex gap-2 items-center" },
+                        createElement('button', { 
+                            onClick: handleTodayClick, 
+                            className: "px-2 py-1 text-xs bg-purple-500 text-white rounded flex items-center gap-1 hover:bg-purple-600 transition" 
+                        }, 
+                            createElement(Icons.Home, { className: "w-3 h-3" }),
+                            '今天'
+                        ),
+                        isExpanded && createElement('button', { 
+                            onClick: () => setCurrentMonthOffset(prev => prev - 1), 
+                            className: "p-1 hover:bg-gray-100 rounded" 
+                        }, createElement(Icons.ChevronLeft, { className: "w-4 h-4" })),
+                        isExpanded && createElement('button', { 
+                            onClick: () => setCurrentMonthOffset(prev => prev + 1), 
+                            className: "p-1 hover:bg-gray-100 rounded" 
+                        }, createElement(Icons.ChevronRight, { className: "w-4 h-4" })),
+                        createElement('button', { 
+                            onClick: () => setIsExpanded(!isExpanded), 
+                            className: "p-1 hover:bg-gray-100 rounded transition-transform" 
+                        }, 
+                            isExpanded 
+                                ? createElement(Icons.ChevronUp, { className: "w-4 h-4" })
+                                : createElement(Icons.ChevronDown, { className: "w-4 h-4" })
+                        )
+                    )
+                ),
+                isExpanded && createElement('div', { className: "grid grid-cols-7 text-center text-[10px] text-gray-400 font-bold mb-2" }, 
+                    createElement('div', null, '一'),
+                    createElement('div', null, '二'),
+                    createElement('div', null, '三'),
+                    createElement('div', null, '四'),
+                    createElement('div', null, '五'),
+                    createElement('div', null, '六'),
+                    createElement('div', null, '日')
+                ),
+                isExpanded && createElement('div', { className: "grid grid-cols-7 gap-1" }, ...days)
+            );
+        };
+
+        // --- 8. 任务视图 (优化后) ---
+        const TaskListView = ({ tasks, members, getMemberById, selectedDate, setSelectedDate, toggleTask, setIsAddTaskModalOpen }) => {
+            const [selectedMemberFilter, setSelectedMemberFilter] = useState('all');
+            
+            const tasksForSelectedDate = tasks.filter(t => t.date === selectedDate);
+            const filtered = tasksForSelectedDate.filter(t => 
+                selectedMemberFilter === 'all' || 
+                t.assignedTo === selectedMemberFilter || 
+                (t.competitors && t.competitors.includes(selectedMemberFilter))
+            );
+            const tasksPending = filtered.filter(t => !t.completed);
+            const tasksCompleted = filtered.filter(t => t.completed);
+            
+            const memberSelector = [
+                { id: 'all', name: '全部', avatar: '🏠' },
+                ...members
+            ].map(m => createElement('button', {
+                key: m.id,
+                onClick: () => setSelectedMemberFilter(m.id),
+                className: `px-3 py-2 rounded-full text-sm font-medium transition flex items-center gap-2 flex-shrink-0 ${selectedMemberFilter === m.id ? `bg-purple-600 text-white shadow-md` : 'bg-gray-100 text-gray-700'}`
+            }, m.avatar, m.name));
+
+            const renderTaskItem = (task) => {
+                const assignee = getMemberById(task.assignedTo);
+                const isCompleted = task.completed;
+                const cardColor = task.taskColor || 'bg-gray-100';
+                
+                const competitors = task.type === 'competition' 
+                    ? task.competitors.map(id => getMemberById(id))
+                    : [assignee];
+                
+                const competitorPills = competitors.map(c => 
+                    createElement('span', { key: c.id, className: `px-2 py-0.5 rounded-full text-xs font-medium ${c.text} ${c.color.replace('-500', '-100')}` }, c.avatar)
+                );
+
+                return createElement('div', { 
+                    key: task.id, 
+                    className: `bg-white p-4 rounded-xl shadow-premium flex items-center justify-between border-l-4 ${assignee.border} transition-all mb-3` 
+                },
+                    createElement('div', { className: "flex items-center gap-3 flex-1" },
+                        createElement('div', { className: `w-12 h-12 flex items-center justify-center rounded-lg text-2xl ${cardColor}` }, task.icon),
+                        createElement('div', { className: "flex-1" },
+                            createElement('h3', { className: `font-medium text-gray-800 ${isCompleted ? 'line-through text-gray-400' : ''}` }, task.title),
+                            createElement('div', { className: "flex items-center gap-2 text-xs text-gray-500 mt-1" },
+                                createElement('span', { className: "text-yellow-500 flex items-center" }, 
+                                    createElement(Icons.Star, { className: "w-3 h-3 mr-0.5 fill-current" }), task.stars
+                                ),
+                                task.type === 'competition' && createElement('span', { className: "text-purple-600" }, '🏆竞争')
+                            )
+                        )
+                    ),
+                    createElement('div', { className: "flex flex-col items-end gap-2" },
+                        createElement('div', { className: "flex items-center gap-1" }, ...competitorPills),
+                        createElement('button', { 
+                            onClick: () => toggleTask(task.id), 
+                            disabled: isCompleted, 
+                            className: "transition-transform active:scale-90" 
+                        },
+                            isCompleted 
+                                ? createElement(Icons.CheckCircle, { className: "w-6 h-6 text-green-500 fill-current" }) 
+                                : createElement(Icons.Circle, { className: "w-6 h-6 text-gray-300 hover:text-purple-500" })
+                        )
+                    )
+                );
+            };
+            
+            return createElement('div', { className: "space-y-4 pb-20" },
+                // 日历选择器
+                createElement(DateSelector, { selectedDate, setSelectedDate, tasks }),
+                
+                // 成员筛选
+                createElement('div', { className: "flex space-x-3 overflow-x-auto pb-4 scrollbar-hide" }, ...memberSelector),
+                
+                // 任务列表
+                createElement('div', { className: "space-y-3" },
+                    tasksPending.length > 0 
+                        ? tasksPending.map(renderTaskItem) 
+                        : createElement('p', { className: 'text-gray-500 text-center py-10 bg-white rounded-xl' }, '✨ 暂无待完成任务'),
+                    tasksCompleted.length > 0 && createElement('h3', { className: "font-bold text-gray-500 mt-6 mb-3" }, '✅ 已完成'),
+                    tasksCompleted.map(renderTaskItem)
+                ),
+                
+                // 添加任务按钮
+                createElement('button', { 
+                    onClick: () => setIsAddTaskModalOpen(true), 
+                    className: "fixed bottom-20 right-6 bg-purple-600 text-white w-14 h-14 rounded-full shadow-lg hover:bg-purple-700 transition flex items-center justify-center" 
+                }, 
+                    createElement(Icons.Plus, { className: "w-8 h-8" })
+                )
+            );
+        };
+
+        // --- 9. 编辑成员模态框 ---
+        const EditMemberModal = ({ member, onClose, onSave }) => {
+            const [name, setName] = useState(member.name);
+            const [stars, setStars] = useState(member.stars);
+            const [avatar, setAvatar] = useState(member.avatar);
+
+            const handleSave = () => {
+                if (!name || stars < 0) return;
+                onSave({ ...member, name, stars, avatar });
+            };
+
+            return createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4" },
+                createElement('div', { className: "bg-white w-full max-w-sm rounded-xl p-6 shadow-premium space-y-4" },
+                    createElement('div', { className: "flex items-center justify-between border-b pb-3" },
+                        createElement('h2', { className: "text-xl font-bold flex items-center gap-2" }, 
+                            createElement(Icons.Edit, { className: "w-5 h-5 text-purple-600" }),
+                            `编辑成员`
+                        ),
+                        createElement('button', { 
+                            onClick: onClose, 
+                            className: "p-1 hover:bg-gray-100 rounded transition" 
+                        }, createElement(Icons.X, { className: "w-5 h-5 text-gray-500" }))
+                    ),
+                    
+                    // 姓名输入
+                    createElement('div', { className: "flex items-center gap-4" }, 
+                        createElement(Icons.List, { className: "w-5 h-5 text-gray-500" }),
+                        createElement('input', { type: "text", value: name, onChange: (e) => setName(e.target.value), className: "w-full border-b focus:outline-none py-1", placeholder: "姓名" })
+                    ),
+                    
+                    // 星星输入
+                    createElement('div', { className: "flex items-center gap-4" }, 
+                        createElement(Icons.Star, { className: "w-5 h-5 text-yellow-500 fill-current" }),
+                        createElement('input', { type: "number", min: 0, value: stars, onChange: (e) => setStars(parseInt(e.target.value) || 0), className: "w-full border-b focus:outline-none py-1", placeholder: "星星数量" })
+                    ),
+                    
+                    // 头像输入
+                    createElement('div', { className: "flex items-center gap-4" }, 
+                        createElement('span', { className: "text-xl" }, avatar),
+                        createElement('input', { type: "text", maxLength: 2, value: avatar, onChange: (e) => setAvatar(e.target.value), className: "w-full border-b focus:outline-none py-1", placeholder: "头像 (Emoji)" })
+                    ),
+
+                    // 按钮
+                    createElement('div', { className: "flex justify-end gap-3 pt-4" },
+                        createElement('button', { onClick: onClose, className: "px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300" }, '取消'),
+                        createElement('button', { onClick: handleSave, className: "px-4 py-2 bg-purple-600 text-white rounded-lg shadow-md hover:bg-purple-700" }, '保存')
+                    )
+                )
+            );
+        };
+        
+        // --- 10. 任务创建表单 ---
+        const AddTaskModal = ({ onClose, onSave, members }) => {
+            const [title, setTitle] = useState('');
+            const [selectedMembers, setSelectedMembers] = useState(members[0] ? [members[0].id] : []);
+            const [stars, setStars] = useState(1);
+            const [priority, setPriority] = useState('low');
+            const [taskType, setTaskType] = useState('individual');
+            const [dateToggle] = useState(true);
+
+            const handleToggleMember = (id) => {
+                if (taskType === 'individual') {
+                    setSelectedMembers([id]);
+                } else {
+                    setSelectedMembers(prev => prev.includes(id) ? prev.filter(mid => mid !== id) : [...prev, id]);
+                }
+            };
+
+            const handleSave = () => {
+                if (!title || selectedMembers.length === 0) { alert('请填写标题并选择成员'); return; }
+                
+                const newTask = {
+                    id: `t${Date.now()}`,
+                    title: title,
+                    assignedTo: selectedMembers[0], 
+                    date: dateToggle ? '2025-11-26' : null, 
+                    completed: false,
+                    stars: stars,
+                    priority: priority,
+                    icon: taskType === 'competition' ? '🏆' : '🌟', 
+                    taskColor: taskType === 'competition' ? 'bg-yellow-100' : 'bg-indigo-100',
+                    type: taskType,
+                    competitors: taskType === 'competition' ? selectedMembers : undefined,
+                };
+                onSave(newTask);
+            };
+
+            const memberPills = members.map(m => createElement('button', {
+                key: m.id,
+                onClick: () => handleToggleMember(m.id),
+                className: `px-3 py-1 rounded-full text-sm font-medium transition flex items-center gap-2 ${selectedMembers.includes(m.id) ? `${m.color} text-white` : 'bg-gray-100 text-gray-700'}`
+            }, m.avatar, m.name, selectedMembers.includes(m.id) ? '✓' : null));
+
+            // 🚨 修复点：这里引用的 Icons.Clock 现在已经定义
+            const timeAndRepeatItems = [
+                { icon: Icons.Calendar, label: '日期', value: '2025-11-26', toggle: dateToggle, setToggle: () => {} },
+                { icon: Icons.Clock, label: '时间', value: '无时间限制', toggle: false, setToggle: () => {} },
+            ].map(item => createElement('div', { key: item.label, className: "flex justify-between items-center py-2" },
+                createElement('div', { className: "flex items-center gap-3" }, createElement(item.icon, { className: "w-6 h-6 text-gray-500" }), item.label, createElement('span', { className: "text-gray-500 text-sm" }, item.value)),
+                createElement('input', { type: "checkbox", checked: item.toggle, onChange: (e) => item.setToggle(e.target.checked), className: "toggle-switch hidden" })
+            ));
+            
+            const priorityButtons = ['low', 'medium', 'high'].map(p => createElement('button', {
+                key: p,
+                onClick: () => setPriority(p),
+                className: `px-3 py-1 rounded text-sm transition ${priority === p ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-700'}`
+            }, p.toUpperCase()));
+
+            const taskTypeButtons = ['individual', 'competition'].map(t => createElement('button', {
+                key: t,
+                onClick: () => { setTaskType(t); if (t === 'individual') setSelectedMembers([selectedMembers[0] || members[0].id]); },
+                className: `px-4 py-2 rounded-lg text-sm transition ${taskType === t ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-700'}`
+            }, t === 'individual' ? '个人任务' : '竞争任务'));
+
+
+            return createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-end" },
+                createElement('div', { className: "bg-white w-full max-w-md rounded-t-3xl p-6 h-[90%] overflow-y-auto" },
+                    // Header
+                    createElement('div', { className: "flex justify-between items-center mb-6" },
+                        createElement('button', { 
+                            onClick: onClose, 
+                            className: "p-2 hover:bg-gray-100 rounded-lg transition flex items-center justify-center" 
+                        }, createElement(Icons.X, { className: "w-6 h-6 text-gray-500" })),
+                        createElement('h2', { className: "text-xl font-bold flex items-center gap-2" }, 
+                            createElement(Icons.Plus, { className: "w-5 h-5 text-purple-600" }),
+                            '添加任务'
+                        ),
+                        createElement('button', { 
+                            onClick: handleSave, 
+                            className: "px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-1" 
+                        }, 
+                            createElement(Icons.CheckCircle, { className: "w-4 h-4" }),
+                            '保存'
+                        )
+                    ),
+
+                    // Form Fields
+                    createElement('div', { className: "space-y-4" },
+                        createElement('div', { className: "border-b pb-4" }, createElement('input', { type: "text", placeholder: "*标题", className: "w-full text-xl font-medium focus:outline-none", value: title, onChange: (e) => setTitle(e.target.value) })),
+                        createElement('div', { className: "space-y-2 text-gray-700" }, ...timeAndRepeatItems),
+                        createElement('div', { className: "flex items-center justify-between border-t py-4" }, createElement('div', { className: "flex items-center gap-2" }, createElement(Icons.Star, { className: "w-6 h-6 text-yellow-500 fill-current" }), '星星'), createElement('input', { type: "number", min: 1, max: 10, value: stars, onChange: (e) => setStars(parseInt(e.target.value) || 1), className: "w-12 text-center border rounded" })),
+                        createElement('div', { className: "border-t py-4" }, createElement('p', { className: "font-medium mb-3" }, '*任务类型'), createElement('div', { className: "flex gap-4" }, ...taskTypeButtons)),
+                        createElement('div', { className: "border-b py-4" }, createElement('p', { className: "font-medium mb-3" }, '*选择成员'), createElement('div', { className: "flex flex-wrap gap-2" }, ...memberPills)),
+                        createElement('div', { className: "border-b py-4" }, createElement('p', { className: "font-medium mb-3" }, '优先级'), createElement('div', { className: "flex gap-4" }, ...priorityButtons))
+                    )
+                )
+            );
+        };
+        
+        // --- 11. 主应用组件 ---
+        function FamilyTaskApp() {
+            const [activeTab, setActiveTab] = useState('tasks');
+            const [members, setMembers] = useState(INITIAL_MEMBERS);
+            const [tasks, setTasks] = useState(INITIAL_TASKS);
+            const [rewards, setRewards] = useState(INITIAL_REWARDS);
+            const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false); 
+            const [selectedDate, setSelectedDate] = useState('2025-11-26'); 
+            const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(null); 
+            const [isAddRewardModalOpen, setIsAddRewardModalOpen] = useState(false); 
+            const [isStarEffectActive, setIsStarEffectActive] = useState(false);
+            const [isCongratulateActive, setIsCongratulateActive] = useState(false);
+            const [confettiPieces, setConfettiPieces] = useState([]); 
+            
+            const getMemberById = (id) => members.find(m => m.id === id);
+
+            // --- 成员 CRUD ---
+            const handleAddMember = () => {
+                const name = prompt("请输入新成员的姓名:");
+                if (!name) return;
+                const avatar = prompt("请输入新成员的头像 (表情符号):", "👶");
+                
+                const newId = `m${Date.now()}`;
+                const colors = ['bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-purple-500', 'bg-yellow-500'];
+                const texts = ['text-blue-600', 'text-green-600', 'text-red-600', 'text-purple-600', 'text-yellow-600'];
+                const index = Math.floor(Math.random() * colors.length);
+
+                setMembers(prev => [...prev, { 
+                    id: newId, 
+                    name, 
+                    avatar, 
+                    color: colors[index], 
+                    text: texts[index], 
+                    border: colors[index].replace('bg-', 'border-'), 
+                    stars: 0 
+                }]);
+            };
+
+            const handleDeleteMember = (id, name) => {
+                if (window.confirm(`确定删除成员 ${name} 吗？将同时删除相关任务和奖励。`)) {
+                    setMembers(prev => prev.filter(m => m.id !== id));
+                    setTasks(prev => prev.filter(t => t.assignedTo !== id));
+                    setRewards(prev => prev.filter(r => r.assignedTo !== id));
+                }
+            };
+            
+            const handleEditMemberStart = (member) => {
+                setIsEditMemberModalOpen(member);
+            };
+
+            const handleEditMemberSave = (updatedMember) => {
+                setMembers(prev => prev.map(m => m.id === updatedMember.id ? updatedMember : m));
+                setIsEditMemberModalOpen(null);
+            };
+            
+            // --- 任务操作 ---
+            const handleAddTask = (newTask) => {
+                setTasks(prev => [...prev, newTask]);
+                setIsAddTaskModalOpen(false);
+            };
+
+            const toggleTask = (taskId) => {
+                const task = tasks.find(t => t.id === taskId);
+                if (!task || task.completed) return; 
+                
+                const winnerId = task.assignedTo;
+                // 修复:使用固定的今天日期,保持与应用一致
+                const today = '2025-11-26';
+
+                setTasks(prev => prev.map(t => t.id === taskId ? { 
+                    ...t, 
+                    completed: true, 
+                    winnerId: winnerId, 
+                    completedAt: today
+                } : t));
+                
+                setMembers(prev => prev.map(m => 
+                    m.id === winnerId ? { ...m, stars: m.stars + task.stars } : m
+                ));
+                
+                // 触发恭喜动画
+                setIsCongratulateActive(true);
+                
+                // 生成彩纸
+                const newConfetti = Array.from({ length: 30 }, (_, i) => ({
+                    id: i,
+                    left: Math.random() * 100,
+                    delay: Math.random() * 0.5,
+                    color: ['#FFD700', '#FF69B4', '#00CED1', '#FF6347', '#9370DB'][Math.floor(Math.random() * 5)]
+                }));
+                setConfettiPieces(newConfetti);
+                
+                setTimeout(() => {
+                    setIsCongratulateActive(false);
+                    setConfettiPieces([]);
+                }, 3000);
+            };
+
+            // --- 奖励操作 ---
+            const handleAddReward = (newReward) => {
+                setRewards(prev => [...prev, newReward]);
+                setIsAddRewardModalOpen(false);
+            };
+
+            const redeemReward = (rewardId, cost, memberId) => {
+                const member = members.find(m => m.id === memberId);
+                const reward = rewards.find(r => r.id === rewardId);
+
+                if (member && member.stars >= cost) {
+                    if (window.confirm(`确认消耗 ${cost} 颗星星兑换 "${reward.name}" 吗？`)) {
+                        setMembers(prev => prev.map(m => m.id === memberId ? { ...m, stars: m.stars - cost } : m));
+                        setRewards(prev => prev.map(r => r.id === rewardId ? { ...r, progress: r.progress + 1 } : r)); 
+                    }
+                } else {
+                    alert(`星星不够哦！还需要 ${cost - member.stars} 颗星星。⭐`);
+                }
+            };
+            
+            const StarBurstEffect = () => createElement('div', { className: "star-burst text-5xl text-yellow-500" }, '✨');
+            
+            // SVG 恭喜动画组件
+            const CongratulateEffect = () => {
+                return createElement('div', { className: "congratulate-popup" },
+                    createElement('div', { className: "bg-white rounded-3xl p-8 shadow-2xl text-center" },
+                        createElement('div', { className: "text-6xl mb-4" }, '🎉'),
+                        createElement('h2', { className: "text-3xl font-bold text-purple-600 mb-2" }, '恭喜完成！'),
+                        createElement('p', { className: "text-gray-600" }, '太棒了，继续加油！'),
+                        createElement('div', { className: "mt-4" },
+                            createElement('svg', { width: "100", height: "100", viewBox: "0 0 100 100", className: "mx-auto" },
+                                createElement('circle', { cx: "50", cy: "50", r: "45", fill: "none", stroke: "#9333EA", strokeWidth: "4", strokeDasharray: "283", strokeDashoffset: "0" },
+                                    createElement('animate', { attributeName: "stroke-dashoffset", from: "283", to: "0", dur: "0.6s", fill: "freeze" })
+                                ),
+                                createElement('path', { d: "M 30 50 L 45 65 L 70 35", fill: "none", stroke: "#9333EA", strokeWidth: "5", strokeLinecap: "round", strokeLinejoin: "round", strokeDasharray: "50", strokeDashoffset: "0" },
+                                    createElement('animate', { attributeName: "stroke-dashoffset", from: "50", to: "0", dur: "0.4s", begin: "0.3s", fill: "freeze" })
+                                )
+                            )
+                        )
+                    )
+                );
+            };
+            
+            // --- 奖励模态框 ---
+            const AddRewardModal = ({ onClose, onSave }) => {
+                const [name, setName] = useState('');
+                const [cost, setCost] = useState(10);
+                const [assignedTo, setAssignedTo] = useState(members[0] ? members[0].id : '');
+
+                const handleSave = () => {
+                    if (!name || cost <= 0 || !assignedTo) return alert('请填写完整信息');
+                    onSave({
+                        id: `r${Date.now()}`,
+                        name,
+                        cost,
+                        assignedTo,
+                        icon: '🎁',
+                        progress: 0,
+                    });
+                };
+
+                return createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-end" },
+                    createElement('div', { className: "bg-white w-full max-w-md rounded-t-3xl p-6" },
+                        createElement('div', { className: "flex items-center justify-between mb-4" },
+                            createElement('h2', { className: "text-xl font-bold flex items-center gap-2" }, 
+                                createElement(Icons.Trophy, { className: "w-6 h-6 text-pink-600" }),
+                                '新增奖励目标'
+                            ),
+                            createElement('button', { 
+                                onClick: onClose, 
+                                className: "p-1 hover:bg-gray-100 rounded transition" 
+                            }, createElement(Icons.X, { className: "w-5 h-5 text-gray-500" }))
+                        ),
+                        
+                        createElement('div', { className: "mb-3" }, 
+                            createElement('label', { className: "block text-sm font-medium mb-1" }, '奖励名称'),
+                            createElement('input', { type: "text", value: name, onChange: (e) => setName(e.target.value), className: "w-full border rounded p-2", placeholder: "例如: 购买一个新玩具" })
+                        ),
+                        createElement('div', { className: "mb-3" }, 
+                            createElement('label', { className: "block text-sm font-medium mb-1" }, '所需星星数'),
+                            createElement('input', { type: "number", min: 1, value: cost, onChange: (e) => setCost(parseInt(e.target.value) || 1), className: "w-full border rounded p-2" })
+                        ),
+                        createElement('div', { className: "mb-4" }, 
+                            createElement('label', { className: "block text-sm font-medium mb-1" }, '目标成员'),
+                            createElement('select', { value: assignedTo, onChange: (e) => setAssignedTo(e.target.value), className: "w-full border rounded p-2" },
+                                members.map(m => createElement('option', { key: m.id, value: m.id }, m.name))
+                            )
+                        ),
+                        
+                        createElement('div', { className: "flex justify-end gap-3" },
+                            createElement('button', { onClick: onClose, className: "px-4 py-2 bg-gray-200 rounded-lg" }, '取消'),
+                            createElement('button', { onClick: handleSave, className: "px-4 py-2 bg-pink-600 text-white rounded-lg" }, '创建')
+                        )
+                    )
+                );
+            };
+            
+            // --- 奖励视图 ---
+            const RewardView = () => {
+                const [selectedRewardMemberId, setSelectedRewardMemberId] = useState(members[0] ? members[0].id : null);
+
+                if (!selectedRewardMemberId && members.length > 0) {
+                    setSelectedRewardMemberId(members[0].id);
+                }
+                
+                if (!selectedRewardMemberId) return createElement('div', {className: 'text-center py-10 text-gray-500'}, '请先添加成员');
+
+                const selectedMember = members.find(m => m.id === selectedRewardMemberId);
+                const memberRewards = rewards.filter(r => r.assignedTo === selectedMember.id);
+                
+                const memberSelector = members.map(m => createElement('button', {
+                    key: m.id,
+                    onClick: () => setSelectedRewardMemberId(m.id),
+                    className: `px-4 py-2 rounded-full text-sm font-medium transition flex items-center gap-2 ${selectedRewardMemberId === m.id ? `bg-pink-500 text-white shadow-md` : 'bg-gray-100 text-gray-700'}`
+                }, m.avatar, m.name));
+
+                const rewardList = memberRewards.map(reward => {
+                    const progressPercent = Math.min(100, (selectedMember.stars / reward.cost) * 100);
+                    const canRedeem = selectedMember.stars >= reward.cost;
+                    
+                    return createElement('div', { key: reward.id, className: `bg-white p-4 rounded-xl shadow-premium border border-gray-100 mb-4` },
+                        createElement('div', { className: "flex gap-4 items-center" },
+                            createElement('div', { className: "w-10 h-10 flex items-center justify-center rounded-lg bg-yellow-200 text-2xl" }, reward.icon),
+                            createElement('div', { className: "flex-grow" },
+                                createElement('h4', { className: "font-medium text-gray-800" }, reward.name),
+                                createElement('div', { className: "w-full bg-gray-200 rounded-full h-2.5 mt-1 overflow-hidden" },
+                                    createElement('div', { className: "bg-yellow-500 h-2.5 rounded-full transition-all duration-500", style: { width: `${progressPercent}%` } })
+                                ),
+                                createElement('div', { className: "text-xs text-yellow-700 mt-1 flex justify-between" }, 
+                                    `⭐ ${selectedMember.stars}/${reward.cost}`, 
+                                    canRedeem && createElement('span', {className: 'text-green-600 font-bold'}, '✓ 可兑换')
+                                )
+                            ),
+                            createElement('button', { 
+                                onClick: () => redeemReward(reward.id, reward.cost, selectedMember.id), 
+                                disabled: !canRedeem,
+                                className: `px-3 py-2 rounded-lg text-sm font-medium transition ${canRedeem ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-200 text-gray-500'}`
+                            }, canRedeem ? '兑换' : '不足')
+                        )
+                    );
+                });
+
+                return createElement('div', { className: "space-y-6 pb-20" },
+                    createElement('h3', { className: "text-xl font-bold" }, '选择成员'),
+                    createElement('div', { className: "flex space-x-3 overflow-x-auto pb-4 scrollbar-hide" }, ...memberSelector),
+
+                    createElement('div', { className: "flex items-center justify-between p-4 bg-white rounded-xl shadow-premium" }, 
+                        createElement('h3', { className: "text-xl font-bold" }, `${selectedMember.name} 的星星`),
+                        createElement('div', { className: "flex items-center gap-2 text-2xl font-bold text-yellow-600" }, 
+                            selectedMember.stars, 
+                            createElement(Icons.Star, { className: "w-6 h-6 fill-current" })
+                        )
+                    ),
+
+                    createElement('div', {className: 'flex justify-between items-center'},
+                        createElement('h3', { className: "text-xl font-bold" }, '奖励目标'),
+                        createElement('button', { 
+                            onClick: () => setIsAddRewardModalOpen(true), 
+                            className: "text-sm text-pink-500 font-medium flex items-center gap-1" 
+                        }, 
+                            createElement(Icons.Plus, {className: 'w-4 h-4'}), 
+                            '创建奖励'
+                        )
+                    ),
+                    
+                    createElement('div', { className: "space-y-4" }, 
+                        memberRewards.length > 0 
+                            ? rewardList 
+                            : createElement('p', {className: 'text-gray-500 text-center py-8 bg-white rounded-xl'}, '暂无奖励目标')
+                    ),
+                    isAddRewardModalOpen && createElement(AddRewardModal, { onClose: () => setIsAddRewardModalOpen(false), onSave: handleAddReward })
+                );
+            };
+
+            // --- Tab 配置 ---
+            const tabs = [
+                { id: 'tasks', name: '任务', icon: Icons.List },
+                { id: 'rewards', name: '奖励', icon: Icons.Trophy },
+                { id: 'members', name: '成员', icon: Icons.Users },
+                { id: 'stats', name: '统计', icon: Icons.Chart }
+            ];
+
+            const tabTitles = {
+                tasks: '任务中心',
+                rewards: '奖励激励',
+                members: '成员管理',
+                stats: '统计分析'
+            };
+
+            // --- 主渲染 ---
+            return createElement('div', { className: "min-h-screen max-w-md mx-auto bg-gray-50 shadow-2xl overflow-hidden relative font-sans text-gray-900" },
+                createElement('header', { className: "bg-white p-4 shadow-sm sticky top-0 z-10 flex items-center gap-3" },
+                    createElement('div', { className: "w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center" },
+                        tabs.find(t => t.id === activeTab) && createElement(tabs.find(t => t.id === activeTab).icon, { className: "w-6 h-6 text-purple-600" })
+                    ),
+                    createElement('h1', { className: "text-xl font-extrabold text-gray-800 flex-1" }, tabTitles[activeTab])
+                ),
+                
+                createElement('main', { className: "p-4" },
+                    activeTab === 'tasks' && createElement(TaskListView, {
+                        tasks, members, getMemberById, selectedDate, setSelectedDate, toggleTask, setIsAddTaskModalOpen
+                    }),
+                    activeTab === 'rewards' && createElement(RewardView),
+                    activeTab === 'members' && createElement(MembersView, {
+                        members, handleEditMemberStart, handleDeleteMember, handleAddMember
+                    }),
+                    activeTab === 'stats' && createElement(StatsView, { tasks, members, getMemberById }) 
+                ),
+
+                // 特效
+                isCongratulateActive && createElement(CongratulateEffect),
+                confettiPieces.map(piece => 
+                    createElement('div', { 
+                        key: piece.id, 
+                        className: "confetti",
+                        style: { 
+                            left: `${piece.left}%`, 
+                            top: '-20px',
+                            backgroundColor: piece.color,
+                            animationDelay: `${piece.delay}s`
+                        }
+                    })
+                ),
+                
+                // 模态框
+                isAddTaskModalOpen && createElement(AddTaskModal, { 
+                    onClose: () => setIsAddTaskModalOpen(false), 
+                    onSave: handleAddTask, 
+                    members 
+                }),
+                isEditMemberModalOpen && createElement(EditMemberModal, { 
+                    member: isEditMemberModalOpen, 
+                    onClose: () => setIsEditMemberModalOpen(null), 
+                    onSave: handleEditMemberSave 
+                }),
+
+                // 底部导航
+                createElement('nav', { className: "fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3 z-20 flex justify-around items-center max-w-md mx-auto" },
+                    tabs.map(tab => {
+                        const isActive = activeTab === tab.id;
+                        return createElement('button', { 
+                            key: tab.id, 
+                            onClick: () => setActiveTab(tab.id), 
+                            className: `flex flex-col items-center gap-1 transition-colors ${isActive ? 'text-purple-600' : 'text-gray-400'}` 
+                        }, 
+                            createElement(tab.icon, { className: "w-6 h-6" }), 
+                            createElement('span', { className: "text-[10px] font-medium" }, tab.name)
+                        );
+                    })
+                )
+            );
+        }
+
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(createElement(FamilyTaskApp));
+    </script>
+</body>
+</html>
