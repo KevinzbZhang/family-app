@@ -31,10 +31,10 @@
         
         /* 恭喜动画 */
         @keyframes congratulate {
-            0% { transform: scale(0) rotate(-180deg); opacity: 0; }
-            50% { transform: scale(1.2) rotate(10deg); opacity: 1; }
-            70% { transform: scale(0.9) rotate(-5deg); }
-            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+            0% { transform: translate(-50%, -50%) scale(0) rotate(-180deg); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.2) rotate(10deg); opacity: 1; }
+            70% { transform: translate(-50%, -50%) scale(0.9) rotate(-5deg); }
+            100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
         }
         @keyframes confetti-fall {
             0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
@@ -42,8 +42,12 @@
         }
         .congratulate-popup {
             animation: congratulate 0.6s ease-out forwards;
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 9999; pointer-events: none;
+            position: fixed; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%);
+            z-index: 9999; 
+            pointer-events: none;
         }
         .confetti {
             position: fixed;
@@ -120,6 +124,7 @@
             { id: 'r3', name: '户外探险一次', cost: 50, assignedTo: 'm1', icon: '⛰️', progress: 0 },
             { id: 'r4', name: '买新包包', cost: 200, assignedTo: 'm2', icon: '👜', progress: 0 },
         ];
+        const INITIAL_REWARD_HISTORY = [];
 
         // --- 3. 辅助函数：日期与统计 ---
         const getStartOfWeek = (dateStr) => {
@@ -400,10 +405,10 @@
             );
         };
 
-        // --- 7. 日历选择器组件(可收起版) ---
+        // --- 7. 日历选择器组件(支持收起和横向滑动) ---
         const DateSelector = ({ selectedDate, setSelectedDate, tasks }) => {
             const [currentMonthOffset, setCurrentMonthOffset] = useState(0);
-            const [isExpanded, setIsExpanded] = useState(true);
+            const [isExpanded, setIsExpanded] = useState(false); // 默认收起
             
             const today = new Date('2025-11-26');
             const displayDate = new Date(today.getFullYear(), today.getMonth() + currentMonthOffset, 1);
@@ -416,14 +421,112 @@
                 return `${y}-${monthStr}-${dayStr}`;
             };
             
+            // 今天按钮点击:回到当前月份并选择今天
+            const handleTodayClick = () => {
+                setCurrentMonthOffset(0);
+                setSelectedDate('2025-11-26');
+            };
+            
+            // 找到今天是本月第几天
+            const todayDate = new Date('2025-11-26');
+            const todayDay = todayDate.getDate();
+            const todayMonth = todayDate.getMonth() + 1;
+            const todayYear = todayDate.getFullYear();
+            const isTodayInCurrentMonth = todayYear === year && todayMonth === month;
+            
+            // 使用 useEffect 滚动到今天位置 - 必须在条件语句外部
+            React.useEffect(() => {
+                if (!isExpanded && isTodayInCurrentMonth) {
+                    setTimeout(() => {
+                        const todayButton = document.getElementById('today-date-button');
+                        if (todayButton) {
+                            todayButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                        }
+                    }, 100);
+                }
+            }, [currentMonthOffset, isExpanded, isTodayInCurrentMonth]);
+            
+            // 收起状态:显示横向滑动的日期列表(显示本月所有日期)
+            if (!isExpanded) {
+                const daysInMonth = new Date(year, month, 0).getDate();
+                const horizontalDays = [];
+                
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = formatDate(year, month, day);
+                    const isToday = dateStr === '2025-11-26';
+                    const isSelected = dateStr === selectedDate;
+                    const dayTasks = tasks.filter(t => t.date === dateStr);
+                    const taskCount = dayTasks.length;
+                    const allCompleted = taskCount > 0 && dayTasks.every(t => t.completed);
+                    
+                    const cardClass = isSelected 
+                        ? 'bg-purple-600 text-white font-bold' 
+                        : isToday 
+                            ? 'bg-green-100 text-green-700 font-medium border border-green-400' 
+                            : 'bg-gray-50 text-gray-700';
+                    
+                    horizontalDays.push(
+                        createElement('button', {
+                            key: day,
+                            id: isToday ? 'today-date-button' : undefined,
+                            onClick: () => setSelectedDate(dateStr),
+                            className: `flex-shrink-0 w-14 h-16 rounded-xl flex flex-col items-center justify-center transition-all ${cardClass}`
+                        },
+                            createElement('span', { className: 'text-[10px] text-gray-400' }, `${month}/${day}`),
+                            createElement('span', { className: 'text-lg font-bold mt-1' }, day),
+                            taskCount > 0 && createElement('div', { 
+                                className: `w-1 h-1 rounded-full mt-1 ${isSelected ? 'bg-white' : allCompleted ? 'bg-green-500' : 'bg-orange-400'}` 
+                            })
+                        )
+                    );
+                }
+                
+                return createElement('div', { className: "bg-white rounded-xl shadow-premium p-3 mb-4" },
+                    createElement('div', { className: "flex justify-between items-center mb-3" },
+                        createElement('div', { className: "flex items-center gap-2" },
+                            createElement(Icons.Calendar, { className: "w-5 h-5 text-purple-600" }),
+                            createElement('h3', { className: "text-base font-bold text-gray-800" }, `${year}年 ${month}月`)
+                        ),
+                        createElement('div', { className: "flex gap-2 items-center" },
+                            createElement('button', { 
+                                onClick: () => {
+                                    handleTodayClick();
+                                    setTimeout(() => {
+                                        const todayButton = document.getElementById('today-date-button');
+                                        if (todayButton) {
+                                            todayButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                                        }
+                                    }, 100);
+                                }, 
+                                className: "px-2 py-1 text-xs bg-purple-500 text-white rounded flex items-center gap-1 hover:bg-purple-600 transition" 
+                            }, 
+                                createElement(Icons.Home, { className: "w-3 h-3" }),
+                                '今天'
+                            ),
+                            createElement('button', { 
+                                onClick: () => setCurrentMonthOffset(prev => prev - 1), 
+                                className: "p-1 hover:bg-gray-100 rounded" 
+                            }, createElement(Icons.ChevronLeft, { className: "w-4 h-4" })),
+                            createElement('button', { 
+                                onClick: () => setCurrentMonthOffset(prev => prev + 1), 
+                                className: "p-1 hover:bg-gray-100 rounded" 
+                            }, createElement(Icons.ChevronRight, { className: "w-4 h-4" })),
+                            createElement('button', { 
+                                onClick: () => setIsExpanded(true), 
+                                className: "p-1 hover:bg-gray-100 rounded transition-transform" 
+                            }, createElement(Icons.ChevronDown, { className: "w-4 h-4" }))
+                        )
+                    ),
+                    createElement('div', { className: "flex gap-2 overflow-x-auto scrollbar-hide pb-2" }, ...horizontalDays)
+                );
+            }
+            
+            // 展开状态:显示月视图
             const daysInMonth = new Date(year, month, 0).getDate();
             const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
-            
-            // 修复:周日应该在最后,所以调整为0时变成7
             const adjustedFirstDay = firstDayOfWeek === 0 ? 7 : firstDayOfWeek;
             
             const days = [];
-            // 添加空白占位(周一到周日,周一索引1)
             for (let i = 1; i < adjustedFirstDay; i++) {
                 days.push(createElement('div', { key: `empty-${i}` }));
             }
@@ -451,12 +554,6 @@
                     taskCount > 0 && createElement('div', { className: `w-1 h-1 rounded-full mt-0.5 ${isSelected ? 'bg-white' : allCompleted ? 'bg-green-500' : 'bg-gray-400'}` })
                 ));
             }
-            
-            // 今天按钮点击:回到当前月份并选择今天
-            const handleTodayClick = () => {
-                setCurrentMonthOffset(0);
-                setSelectedDate('2025-11-26');
-            };
 
             return createElement('div', { className: "bg-white rounded-xl shadow-premium p-4 mb-4" },
                 createElement('div', { className: "flex justify-between items-center mb-3" },
@@ -472,25 +569,21 @@
                             createElement(Icons.Home, { className: "w-3 h-3" }),
                             '今天'
                         ),
-                        isExpanded && createElement('button', { 
+                        createElement('button', { 
                             onClick: () => setCurrentMonthOffset(prev => prev - 1), 
                             className: "p-1 hover:bg-gray-100 rounded" 
                         }, createElement(Icons.ChevronLeft, { className: "w-4 h-4" })),
-                        isExpanded && createElement('button', { 
+                        createElement('button', { 
                             onClick: () => setCurrentMonthOffset(prev => prev + 1), 
                             className: "p-1 hover:bg-gray-100 rounded" 
                         }, createElement(Icons.ChevronRight, { className: "w-4 h-4" })),
                         createElement('button', { 
-                            onClick: () => setIsExpanded(!isExpanded), 
+                            onClick: () => setIsExpanded(false), 
                             className: "p-1 hover:bg-gray-100 rounded transition-transform" 
-                        }, 
-                            isExpanded 
-                                ? createElement(Icons.ChevronUp, { className: "w-4 h-4" })
-                                : createElement(Icons.ChevronDown, { className: "w-4 h-4" })
-                        )
+                        }, createElement(Icons.ChevronUp, { className: "w-4 h-4" }))
                     )
                 ),
-                isExpanded && createElement('div', { className: "grid grid-cols-7 text-center text-[10px] text-gray-400 font-bold mb-2" }, 
+                createElement('div', { className: "grid grid-cols-7 text-center text-[10px] text-gray-400 font-bold mb-2" }, 
                     createElement('div', null, '一'),
                     createElement('div', null, '二'),
                     createElement('div', null, '三'),
@@ -499,13 +592,16 @@
                     createElement('div', null, '六'),
                     createElement('div', null, '日')
                 ),
-                isExpanded && createElement('div', { className: "grid grid-cols-7 gap-1" }, ...days)
+                createElement('div', { className: "grid grid-cols-7 gap-1" }, ...days)
             );
         };
 
         // --- 8. 任务视图 (优化后) ---
         const TaskListView = ({ tasks, members, getMemberById, selectedDate, setSelectedDate, toggleTask, setIsAddTaskModalOpen }) => {
             const [selectedMemberFilter, setSelectedMemberFilter] = useState('all');
+            const [fabPosition, setFabPosition] = useState({ x: null, y: null }); // 悬浮按钮位置
+            const [isDragging, setIsDragging] = useState(false);
+            const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
             
             const tasksForSelectedDate = tasks.filter(t => t.date === selectedDate);
             const filtered = tasksForSelectedDate.filter(t => 
@@ -550,7 +646,9 @@
                                 createElement('span', { className: "text-yellow-500 flex items-center" }, 
                                     createElement(Icons.Star, { className: "w-3 h-3 mr-0.5 fill-current" }), task.stars
                                 ),
-                                task.type === 'competition' && createElement('span', { className: "text-purple-600" }, '🏆竞争')
+                                task.type === 'competition' && createElement('span', { className: "text-purple-600" }, '🏆竞争'),
+                                task.type === 'collaborative' && createElement('span', { className: "text-green-600" }, '🤝共同'),
+                                task.isRecurring && createElement('span', { className: "text-blue-600" }, '🔄周期')
                             )
                         )
                     ),
@@ -569,6 +667,63 @@
                 );
             };
             
+            // 悬浮按钮拖拽处理
+            const handleFabMouseDown = (e) => {
+                setIsDragging(true);
+                setDragStart({ x: e.clientX, y: e.clientY });
+            };
+            
+            const handleFabTouchStart = (e) => {
+                setIsDragging(true);
+                const touch = e.touches[0];
+                setDragStart({ x: touch.clientX, y: touch.clientY });
+            };
+            
+            React.useEffect(() => {
+                const handleMove = (clientX, clientY) => {
+                    if (isDragging) {
+                        const deltaX = clientX - dragStart.x;
+                        const deltaY = clientY - dragStart.y;
+                        
+                        setFabPosition(prev => ({
+                            x: (prev.x || 0) + deltaX,
+                            y: (prev.y || 0) + deltaY
+                        }));
+                        
+                        setDragStart({ x: clientX, y: clientY });
+                    }
+                };
+                
+                const handleMouseMove = (e) => handleMove(e.clientX, e.clientY);
+                const handleTouchMove = (e) => {
+                    const touch = e.touches[0];
+                    handleMove(touch.clientX, touch.clientY);
+                };
+                
+                const handleEnd = () => setIsDragging(false);
+                
+                if (isDragging) {
+                    document.addEventListener('mousemove', handleMouseMove);
+                    document.addEventListener('mouseup', handleEnd);
+                    document.addEventListener('touchmove', handleTouchMove);
+                    document.addEventListener('touchend', handleEnd);
+                }
+                
+                return () => {
+                    document.removeEventListener('mousemove', handleMouseMove);
+                    document.removeEventListener('mouseup', handleEnd);
+                    document.removeEventListener('touchmove', handleTouchMove);
+                    document.removeEventListener('touchend', handleEnd);
+                };
+            }, [isDragging, dragStart]);
+            
+            const fabStyle = fabPosition.x !== null ? {
+                right: 'auto',
+                bottom: 'auto',
+                left: `calc(100% - 80px + ${fabPosition.x}px)`,
+                top: `calc(100% - 140px + ${fabPosition.y}px)`
+            } : {};
+            
             return createElement('div', { className: "space-y-4 pb-20" },
                 // 日历选择器
                 createElement(DateSelector, { selectedDate, setSelectedDate, tasks }),
@@ -585,10 +740,13 @@
                     tasksCompleted.map(renderTaskItem)
                 ),
                 
-                // 添加任务按钮
+                // 可拖拽的添加任务按钮
                 createElement('button', { 
-                    onClick: () => setIsAddTaskModalOpen(true), 
-                    className: "fixed bottom-20 right-6 bg-purple-600 text-white w-14 h-14 rounded-full shadow-lg hover:bg-purple-700 transition flex items-center justify-center" 
+                    onClick: () => !isDragging && setIsAddTaskModalOpen(true),
+                    onMouseDown: handleFabMouseDown,
+                    onTouchStart: handleFabTouchStart,
+                    style: fabStyle,
+                    className: `fixed ${fabPosition.x === null ? 'bottom-20 right-6' : ''} bg-purple-600 text-white w-14 h-14 rounded-full shadow-lg hover:bg-purple-700 transition flex items-center justify-center cursor-move z-30`
                 }, 
                     createElement(Icons.Plus, { className: "w-8 h-8" })
                 )
@@ -646,13 +804,15 @@
             );
         };
         
-        // --- 10. 任务创建表单 ---
+        // --- 10. 任务创建表单 (支持周期性和共同任务) ---
         const AddTaskModal = ({ onClose, onSave, members }) => {
             const [title, setTitle] = useState('');
             const [selectedMembers, setSelectedMembers] = useState(members[0] ? [members[0].id] : []);
             const [stars, setStars] = useState(1);
             const [priority, setPriority] = useState('low');
-            const [taskType, setTaskType] = useState('individual');
+            const [taskType, setTaskType] = useState('individual'); // individual, competition, collaborative
+            const [isRecurring, setIsRecurring] = useState(false);
+            const [recurringType, setRecurringType] = useState('daily'); // daily, weekly, monthly
             const [dateToggle] = useState(true);
 
             const handleToggleMember = (id) => {
@@ -674,10 +834,12 @@
                     completed: false,
                     stars: stars,
                     priority: priority,
-                    icon: taskType === 'competition' ? '🏆' : '🌟', 
-                    taskColor: taskType === 'competition' ? 'bg-yellow-100' : 'bg-indigo-100',
+                    icon: taskType === 'competition' ? '🏆' : taskType === 'collaborative' ? '🤝' : '🌟', 
+                    taskColor: taskType === 'competition' ? 'bg-yellow-100' : taskType === 'collaborative' ? 'bg-green-100' : 'bg-indigo-100',
                     type: taskType,
-                    competitors: taskType === 'competition' ? selectedMembers : undefined,
+                    competitors: (taskType === 'competition' || taskType === 'collaborative') ? selectedMembers : undefined,
+                    isRecurring: isRecurring,
+                    recurringType: isRecurring ? recurringType : null,
                 };
                 onSave(newTask);
             };
@@ -688,7 +850,6 @@
                 className: `px-3 py-1 rounded-full text-sm font-medium transition flex items-center gap-2 ${selectedMembers.includes(m.id) ? `${m.color} text-white` : 'bg-gray-100 text-gray-700'}`
             }, m.avatar, m.name, selectedMembers.includes(m.id) ? '✓' : null));
 
-            // 🚨 修复点：这里引用的 Icons.Clock 现在已经定义
             const timeAndRepeatItems = [
                 { icon: Icons.Calendar, label: '日期', value: '2025-11-26', toggle: dateToggle, setToggle: () => {} },
                 { icon: Icons.Clock, label: '时间', value: '无时间限制', toggle: false, setToggle: () => {} },
@@ -697,18 +858,36 @@
                 createElement('input', { type: "checkbox", checked: item.toggle, onChange: (e) => item.setToggle(e.target.checked), className: "toggle-switch hidden" })
             ));
             
+            const priorityMap = { low: '低', medium: '中', high: '高' };
             const priorityButtons = ['low', 'medium', 'high'].map(p => createElement('button', {
                 key: p,
                 onClick: () => setPriority(p),
                 className: `px-3 py-1 rounded text-sm transition ${priority === p ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-700'}`
-            }, p.toUpperCase()));
+            }, priorityMap[p]));
 
-            const taskTypeButtons = ['individual', 'competition'].map(t => createElement('button', {
-                key: t,
-                onClick: () => { setTaskType(t); if (t === 'individual') setSelectedMembers([selectedMembers[0] || members[0].id]); },
-                className: `px-4 py-2 rounded-lg text-sm transition ${taskType === t ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-700'}`
-            }, t === 'individual' ? '个人任务' : '竞争任务'));
+            const taskTypeButtons = [
+                { id: 'individual', label: '个人任务', icon: '👤' },
+                { id: 'competition', label: '竞争任务', icon: '🏆' },
+                { id: 'collaborative', label: '共同任务', icon: '🤝' }
+            ].map(t => createElement('button', {
+                key: t.id,
+                onClick: () => { 
+                    setTaskType(t.id); 
+                    if (t.id === 'individual') setSelectedMembers([selectedMembers[0] || members[0].id]); 
+                },
+                className: `px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 ${taskType === t.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-700'}`
+            }, t.icon, t.label));
 
+            const recurringButtons = [
+                { id: 'daily', label: '每天' },
+                { id: 'weekly', label: '每周' },
+                { id: 'monthly', label: '每月' }
+            ].map(r => createElement('button', {
+                key: r.id,
+                onClick: () => setRecurringType(r.id),
+                disabled: !isRecurring,
+                className: `px-3 py-1 rounded text-sm transition ${recurringType === r.id && isRecurring ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-700'} ${!isRecurring ? 'opacity-50' : ''}`
+            }, r.label));
 
             return createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-end" },
                 createElement('div', { className: "bg-white w-full max-w-md rounded-t-3xl p-6 h-[90%] overflow-y-auto" },
@@ -735,8 +914,26 @@
                     createElement('div', { className: "space-y-4" },
                         createElement('div', { className: "border-b pb-4" }, createElement('input', { type: "text", placeholder: "*标题", className: "w-full text-xl font-medium focus:outline-none", value: title, onChange: (e) => setTitle(e.target.value) })),
                         createElement('div', { className: "space-y-2 text-gray-700" }, ...timeAndRepeatItems),
+                        
+                        // 周期性任务
+                        createElement('div', { className: "border-t py-4" },
+                            createElement('div', { className: "flex items-center justify-between mb-3" },
+                                createElement('p', { className: "font-medium" }, '周期性任务'),
+                                createElement('label', { className: "relative inline-flex items-center cursor-pointer" },
+                                    createElement('input', { 
+                                        type: "checkbox", 
+                                        checked: isRecurring, 
+                                        onChange: (e) => setIsRecurring(e.target.checked),
+                                        className: "sr-only peer" 
+                                    }),
+                                    createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600" })
+                                )
+                            ),
+                            isRecurring && createElement('div', { className: "flex gap-2" }, ...recurringButtons)
+                        ),
+                        
                         createElement('div', { className: "flex items-center justify-between border-t py-4" }, createElement('div', { className: "flex items-center gap-2" }, createElement(Icons.Star, { className: "w-6 h-6 text-yellow-500 fill-current" }), '星星'), createElement('input', { type: "number", min: 1, max: 10, value: stars, onChange: (e) => setStars(parseInt(e.target.value) || 1), className: "w-12 text-center border rounded" })),
-                        createElement('div', { className: "border-t py-4" }, createElement('p', { className: "font-medium mb-3" }, '*任务类型'), createElement('div', { className: "flex gap-4" }, ...taskTypeButtons)),
+                        createElement('div', { className: "border-t py-4" }, createElement('p', { className: "font-medium mb-3" }, '*任务类型'), createElement('div', { className: "flex gap-2 flex-wrap" }, ...taskTypeButtons)),
                         createElement('div', { className: "border-b py-4" }, createElement('p', { className: "font-medium mb-3" }, '*选择成员'), createElement('div', { className: "flex flex-wrap gap-2" }, ...memberPills)),
                         createElement('div', { className: "border-b py-4" }, createElement('p', { className: "font-medium mb-3" }, '优先级'), createElement('div', { className: "flex gap-4" }, ...priorityButtons))
                     )
@@ -750,13 +947,15 @@
             const [members, setMembers] = useState(INITIAL_MEMBERS);
             const [tasks, setTasks] = useState(INITIAL_TASKS);
             const [rewards, setRewards] = useState(INITIAL_REWARDS);
+            const [rewardHistory, setRewardHistory] = useState(INITIAL_REWARD_HISTORY);
             const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false); 
             const [selectedDate, setSelectedDate] = useState('2025-11-26'); 
             const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(null); 
             const [isAddRewardModalOpen, setIsAddRewardModalOpen] = useState(false); 
             const [isStarEffectActive, setIsStarEffectActive] = useState(false);
             const [isCongratulateActive, setIsCongratulateActive] = useState(false);
-            const [confettiPieces, setConfettiPieces] = useState([]); 
+            const [confettiPieces, setConfettiPieces] = useState([]);
+            const [competitionWinner, setCompetitionWinner] = useState(null); // 用于竞争任务选择获胜者
             
             const getMemberById = (id) => members.find(m => m.id === id);
 
@@ -805,24 +1004,46 @@
                 setIsAddTaskModalOpen(false);
             };
 
-            const toggleTask = (taskId) => {
+            const toggleTask = (taskId, selectedWinnerId = null) => {
                 const task = tasks.find(t => t.id === taskId);
                 if (!task || task.completed) return; 
                 
-                const winnerId = task.assignedTo;
-                // 修复:使用固定的今天日期,保持与应用一致
                 const today = '2025-11-26';
-
-                setTasks(prev => prev.map(t => t.id === taskId ? { 
-                    ...t, 
-                    completed: true, 
-                    winnerId: winnerId, 
-                    completedAt: today
-                } : t));
                 
-                setMembers(prev => prev.map(m => 
-                    m.id === winnerId ? { ...m, stars: m.stars + task.stars } : m
-                ));
+                // 竞争任务:需要选择获胜者
+                if (task.type === 'competition' && !selectedWinnerId) {
+                    setCompetitionWinner(taskId);
+                    return;
+                }
+                
+                // 共同任务:所有参与者都获得星星
+                if (task.type === 'collaborative') {
+                    const participants = task.competitors || [task.assignedTo];
+                    setTasks(prev => prev.map(t => t.id === taskId ? { 
+                        ...t, 
+                        completed: true, 
+                        completedAt: today,
+                        participants: participants
+                    } : t));
+                    
+                    setMembers(prev => prev.map(m => 
+                        participants.includes(m.id) ? { ...m, stars: m.stars + task.stars } : m
+                    ));
+                } else {
+                    // 个人任务或竞争任务(已选择获胜者)
+                    const winnerId = selectedWinnerId || task.assignedTo;
+                    
+                    setTasks(prev => prev.map(t => t.id === taskId ? { 
+                        ...t, 
+                        completed: true, 
+                        winnerId: winnerId, 
+                        completedAt: today
+                    } : t));
+                    
+                    setMembers(prev => prev.map(m => 
+                        m.id === winnerId ? { ...m, stars: m.stars + task.stars } : m
+                    ));
+                }
                 
                 // 触发恭喜动画
                 setIsCongratulateActive(true);
@@ -839,6 +1060,7 @@
                 setTimeout(() => {
                     setIsCongratulateActive(false);
                     setConfettiPieces([]);
+                    setCompetitionWinner(null);
                 }, 3000);
             };
 
@@ -854,8 +1076,22 @@
 
                 if (member && member.stars >= cost) {
                     if (window.confirm(`确认消耗 ${cost} 颗星星兑换 "${reward.name}" 吗？`)) {
+                        const today = '2025-11-26';
                         setMembers(prev => prev.map(m => m.id === memberId ? { ...m, stars: m.stars - cost } : m));
-                        setRewards(prev => prev.map(r => r.id === rewardId ? { ...r, progress: r.progress + 1 } : r)); 
+                        setRewards(prev => prev.map(r => r.id === rewardId ? { ...r, progress: r.progress + 1 } : r));
+                        
+                        // 添加兑换记录
+                        const historyItem = {
+                            id: `h${Date.now()}`,
+                            rewardId: rewardId,
+                            rewardName: reward.name,
+                            memberId: memberId,
+                            memberName: member.name,
+                            cost: cost,
+                            date: today,
+                            icon: reward.icon
+                        };
+                        setRewardHistory(prev => [historyItem, ...prev]);
                     }
                 } else {
                     alert(`星星不够哦！还需要 ${cost - member.stars} 颗星星。⭐`);
@@ -885,11 +1121,53 @@
                 );
             };
             
+            // --- 竞争任务获胜者选择模态框 ---
+            const CompetitionWinnerModal = ({ taskId, onClose }) => {
+                const task = tasks.find(t => t.id === taskId);
+                if (!task) return null;
+                
+                const competitors = task.competitors.map(id => getMemberById(id));
+                
+                return createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4" },
+                    createElement('div', { className: "bg-white w-full max-w-sm rounded-xl p-6 shadow-premium" },
+                        createElement('div', { className: "text-center mb-6" },
+                            createElement('div', { className: "text-5xl mb-3" }, '🏆'),
+                            createElement('h2', { className: "text-2xl font-bold text-gray-800 mb-2" }, '选择获胜者'),
+                            createElement('p', { className: "text-gray-600 text-sm" }, `谁完成了任务"${task.title}"?`)
+                        ),
+                        createElement('div', { className: "space-y-3 mb-6" },
+                            competitors.map(member => 
+                                createElement('button', {
+                                    key: member.id,
+                                    onClick: () => {
+                                        toggleTask(taskId, member.id);
+                                        onClose();
+                                    },
+                                    className: `w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-purple-500 hover:bg-purple-50 transition`
+                                },
+                                    createElement('div', { className: `w-14 h-14 rounded-full flex items-center justify-center text-2xl ${member.color}` }, member.avatar),
+                                    createElement('div', { className: "flex-1 text-left" },
+                                        createElement('p', { className: "font-bold text-gray-800" }, member.name),
+                                        createElement('p', { className: "text-sm text-gray-500" }, `获得 ${task.stars} 颗星星`)
+                                    ),
+                                    createElement(Icons.ChevronRight, { className: "w-5 h-5 text-gray-400" })
+                                )
+                            )
+                        ),
+                        createElement('button', { 
+                            onClick: onClose,
+                            className: "w-full px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition" 
+                        }, '取消')
+                    )
+                );
+            };
+            
             // --- 奖励模态框 ---
             const AddRewardModal = ({ onClose, onSave }) => {
                 const [name, setName] = useState('');
                 const [cost, setCost] = useState(10);
                 const [assignedTo, setAssignedTo] = useState(members[0] ? members[0].id : '');
+                const [icon, setIcon] = useState('🎁');
 
                 const handleSave = () => {
                     if (!name || cost <= 0 || !assignedTo) return alert('请填写完整信息');
@@ -898,7 +1176,7 @@
                         name,
                         cost,
                         assignedTo,
-                        icon: '🎁',
+                        icon: icon || '🎁',
                         progress: 0,
                     });
                 };
@@ -919,6 +1197,20 @@
                         createElement('div', { className: "mb-3" }, 
                             createElement('label', { className: "block text-sm font-medium mb-1" }, '奖励名称'),
                             createElement('input', { type: "text", value: name, onChange: (e) => setName(e.target.value), className: "w-full border rounded p-2", placeholder: "例如: 购买一个新玩具" })
+                        ),
+                        createElement('div', { className: "mb-3" }, 
+                            createElement('label', { className: "block text-sm font-medium mb-1" }, '奖励图标 (Emoji)'),
+                            createElement('div', { className: "flex items-center gap-2" },
+                                createElement('div', { className: "w-12 h-12 flex items-center justify-center rounded-lg bg-yellow-100 text-2xl" }, icon),
+                                createElement('input', { 
+                                    type: "text", 
+                                    maxLength: 2,
+                                    value: icon, 
+                                    onChange: (e) => setIcon(e.target.value), 
+                                    className: "flex-1 border rounded p-2", 
+                                    placeholder: "输入emoji表情" 
+                                })
+                            )
                         ),
                         createElement('div', { className: "mb-3" }, 
                             createElement('label', { className: "block text-sm font-medium mb-1" }, '所需星星数'),
@@ -951,6 +1243,9 @@
 
                 const selectedMember = members.find(m => m.id === selectedRewardMemberId);
                 const memberRewards = rewards.filter(r => r.assignedTo === selectedMember.id);
+                
+                // 筛选当前成员的兑换记录
+                const memberRewardHistory = rewardHistory.filter(h => h.memberId === selectedRewardMemberId);
                 
                 const memberSelector = members.map(m => createElement('button', {
                     key: m.id,
@@ -1012,6 +1307,31 @@
                             ? rewardList 
                             : createElement('p', {className: 'text-gray-500 text-center py-8 bg-white rounded-xl'}, '暂无奖励目标')
                     ),
+                    
+                    // 兑换记录 - 仅显示当前成员
+                    createElement('h3', { className: "text-xl font-bold flex items-center gap-2 mt-6" }, 
+                        createElement(Icons.List, { className: "w-6 h-6 text-purple-600" }),
+                        `${selectedMember.name} 的兑换记录`
+                    ),
+                    createElement('div', { className: "bg-white rounded-xl shadow-premium p-4" },
+                        memberRewardHistory.length > 0 
+                            ? createElement('div', { className: "space-y-3" },
+                                memberRewardHistory.slice(0, 10).map(item => 
+                                    createElement('div', { key: item.id, className: "flex items-center gap-3 p-3 bg-gray-50 rounded-lg" },
+                                        createElement('div', { className: "w-10 h-10 flex items-center justify-center rounded-lg bg-pink-100 text-2xl" }, item.icon),
+                                        createElement('div', { className: "flex-1" },
+                                            createElement('p', { className: "font-medium text-gray-800" }, item.rewardName),
+                                            createElement('p', { className: "text-xs text-gray-500" }, item.date)
+                                        ),
+                                        createElement('div', { className: "text-right" },
+                                            createElement('p', { className: "text-sm font-bold text-red-600" }, `-${item.cost}⭐`)
+                                        )
+                                    )
+                                )
+                            )
+                            : createElement('p', { className: 'text-gray-500 text-center py-6' }, '暂无兑换记录')
+                    ),
+                    
                     isAddRewardModalOpen && createElement(AddRewardModal, { onClose: () => setIsAddRewardModalOpen(false), onSave: handleAddReward })
                 );
             };
@@ -1076,6 +1396,10 @@
                     member: isEditMemberModalOpen, 
                     onClose: () => setIsEditMemberModalOpen(null), 
                     onSave: handleEditMemberSave 
+                }),
+                competitionWinner && createElement(CompetitionWinnerModal, {
+                    taskId: competitionWinner,
+                    onClose: () => setCompetitionWinner(null)
                 }),
 
                 // 底部导航
