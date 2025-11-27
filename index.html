@@ -800,12 +800,11 @@
         // --- 9. 编辑成员模态框 ---
         const EditMemberModal = ({ member, onClose, onSave }) => {
             const [name, setName] = useState(member.name);
-            const [stars, setStars] = useState(member.stars);
             const [avatar, setAvatar] = useState(member.avatar);
 
             const handleSave = () => {
-                if (!name || stars < 0) return;
-                onSave({ ...member, name, stars, avatar });
+                if (!name) return;
+                onSave({ ...member, name, avatar });
             };
 
             return createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4" },
@@ -825,12 +824,6 @@
                     createElement('div', { className: "flex items-center gap-4" }, 
                         createElement(Icons.List, { className: "w-5 h-5 text-gray-500" }),
                         createElement('input', { type: "text", value: name, onChange: (e) => setName(e.target.value), className: "w-full border-b focus:outline-none py-1", placeholder: "姓名" })
-                    ),
-                    
-                    // 星星输入
-                    createElement('div', { className: "flex items-center gap-4" }, 
-                        createElement(Icons.Star, { className: "w-5 h-5 text-yellow-500 fill-current" }),
-                        createElement('input', { type: "number", min: 0, value: stars, onChange: (e) => setStars(parseInt(e.target.value) || 0), className: "w-full border-b focus:outline-none py-1", placeholder: "星星数量" })
                     ),
                     
                     // 头像输入
@@ -1219,7 +1212,7 @@
 
                 if (member && member.stars >= cost) {
                     if (window.confirm(`确认消耗 ${cost} 颗星星兑换 "${reward.name}" 吗？`)) {
-                        const today = '2025-11-26';
+                        const today = new Date().toLocaleString('zh-CN');
                         setMembers(prev => prev.map(m => m.id === memberId ? { ...m, stars: m.stars - cost } : m));
                         setRewards(prev => prev.map(r => r.id === rewardId ? { ...r, progress: r.progress + 1 } : r));
                         
