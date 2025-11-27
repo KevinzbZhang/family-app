@@ -97,6 +97,41 @@
             X: (props) => createElement(Icon, props, createElement('line', { x1: "18", y1: "6", x2: "6", y2: "18"}), createElement('line', { x1: "6", y1: "6", x2: "18", y2: "18"})),
             Clock: (props) => createElement(Icon, props, createElement('circle', { cx: "12", cy: "12", r: "10" }), createElement('polyline', { points: "12 6 12 12 16 14"})),
         };
+        
+        // StarHistoryView组件用于显示星星操作历史
+        const StarHistoryView = ({ starHistory, members }) => {
+            const getMemberName = (id) => members.find(m => m.id === id)?.name || '未知成员';
+            
+            return createElement('div', { className: 'mt-6 bg-white p-4 rounded-xl shadow-sm' },
+                createElement('h3', { className: 'font-bold text-gray-700 mb-3 flex items-center gap-2' },
+                    createElement(Icons.Clock, { className: 'w-5 h-5 text-yellow-600' }),
+                    '星星操作历史'
+                ),
+                createElement('div', { className: 'space-y-2 max-h-40 overflow-y-auto' },
+                    starHistory.length > 0 ? (
+                        starHistory.slice(0, 10).map(record => (
+                            createElement('div', { key: record.id, className: 'text-sm p-2 border-b border-gray-100' },
+                                createElement('div', { className: 'flex justify-between' },
+                                    createElement('span', { className: 'text-gray-700' },
+                                        `${getMemberName(record.memberId)} `,
+                                        createElement('span', { className: record.starsChange > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium' },
+                                            record.starsChange > 0 ? `+${record.starsChange}` : record.starsChange
+                                        ),
+                                        ' 星星'
+                                    ),
+                                    createElement('span', { className: 'text-gray-500' }, record.date)
+                                ),
+                                createElement('div', { className: 'mt-1 text-gray-500' },
+                                    `操作人: ${getMemberName(record.operatorId)}${record.reason ? `，原因: ${record.reason}` : ''}`
+                                )
+                            )
+                        ))
+                    ) : (
+                        createElement('p', { className: 'text-gray-500 text-center py-4' }, '暂无星星操作记录')
+                    )
+                )
+            );
+        };
 
 
         // --- 2. 模拟初始数据 (简化角色) ---
@@ -104,6 +139,9 @@
             { id: 'm1', name: '爸爸', color: 'bg-blue-500', text: 'text-blue-600', border: 'border-blue-500', stars: 10, avatar: '👨' },
             { id: 'm2', name: '妈妈', color: 'bg-pink-500', text: 'text-pink-600', border: 'border-pink-500', stars: 5, avatar: '👩' },
             { id: 'm3', name: '桃桃', color: 'bg-red-500', text: 'text-red-600', border: 'border-red-500', stars: 12, avatar: '👧' },
+            { id: 'm4', name: '爷爷', color: 'bg-gray-600', text: 'text-gray-600', border: 'border-gray-600', stars: 8, avatar: '👴' },
+            { id: 'm5', name: '奶奶', color: 'bg-gray-500', text: 'text-gray-500', border: 'border-gray-500', stars: 6, avatar: '👵' },
+            { id: 'm6', name: '姑姑', color: 'bg-purple-500', text: 'text-purple-600', border: 'border-purple-500', stars: 7, avatar: '👱‍♀️' },
         ];
         const INITIAL_TASKS = [
             { id: 't1', title: '起床洗漱', assignedTo: 'm3', date: '2025-11-26', completed: false, stars: 1, priority: 'high', icon: '🪥', taskColor: 'bg-red-100', type: 'individual' },
@@ -279,8 +317,10 @@
                     '任务完成统计'
                 ),
                 
-                // 成员筛选
-                createElement('div', { className: "flex space-x-3 overflow-x-auto pb-4 scrollbar-hide" }, ...memberSelector),
+                // 成员筛选 - 优化为支持横向滑动
+                createElement('div', { className: "flex space-x-3 overflow-x-auto pb-4 scrollbar-hide flex-nowrap whitespace-nowrap" }, 
+                    memberSelector.map(button => createElement('div', { className: "flex-shrink-0" }, button))
+                ),
                 
                 // 时间筛选
                 createElement('div', { className: "flex gap-3 text-sm font-medium" },
@@ -352,7 +392,7 @@
         };
         
         // --- 6. 成员管理视图 (MembersView) ---
-        const MembersView = ({ members, handleEditMemberStart, handleDeleteMember, handleAddMember }) => {
+        const MembersView = ({ members, handleEditMemberStart, handleDeleteMember, handleAddMember, handleEditStars }) => {
             const renderMemberCard = (member) => {
                 return createElement('div', { 
                     key: member.id, 
@@ -374,6 +414,10 @@
                                 onClick: () => handleEditMemberStart(member), 
                                 className: "p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition flex items-center justify-center" 
                             }, createElement(Icons.Edit, { className: "w-5 h-5" })),
+                            createElement('button', { 
+                                onClick: () => handleEditStars(member.id), 
+                                className: "p-2 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition flex items-center justify-center" 
+                            }, createElement(Icons.Star, { className: "w-5 h-5" })),
                             createElement('button', { 
                                 onClick: () => handleDeleteMember(member.id, member.name), 
                                 className: "p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition flex items-center justify-center" 
@@ -597,7 +641,7 @@
         };
 
         // --- 8. 任务视图 (优化后) ---
-        const TaskListView = ({ tasks, members, getMemberById, selectedDate, setSelectedDate, toggleTask, setIsAddTaskModalOpen }) => {
+        const TaskListView = ({ tasks, members, getMemberById, selectedDate, setSelectedDate, toggleTask, setIsAddTaskModalOpen, starHistory }) => {
             const [selectedMemberFilter, setSelectedMemberFilter] = useState('all');
             const [fabPosition, setFabPosition] = useState({ x: null, y: null }); // 悬浮按钮位置
             const [isDragging, setIsDragging] = useState(false);
@@ -813,6 +857,8 @@
             const [taskType, setTaskType] = useState('individual'); // individual, competition, collaborative
             const [isRecurring, setIsRecurring] = useState(false);
             const [recurringType, setRecurringType] = useState('daily'); // daily, weekly, monthly
+            const [selectedWeekDays, setSelectedWeekDays] = useState(['1']); // 每周选择的星期几，默认周一
+            const [selectedMonthDays, setSelectedMonthDays] = useState([1]); // 每月选择的日期，默认1号
             const [dateToggle] = useState(true);
 
             const handleToggleMember = (id) => {
@@ -840,6 +886,10 @@
                     competitors: (taskType === 'competition' || taskType === 'collaborative') ? selectedMembers : undefined,
                     isRecurring: isRecurring,
                     recurringType: isRecurring ? recurringType : null,
+                    recurringDetails: isRecurring ? {
+                        weekDays: recurringType === 'weekly' ? selectedWeekDays : undefined,
+                        monthDays: recurringType === 'monthly' ? selectedMonthDays : undefined
+                    } : null
                 };
                 onSave(newTask);
             };
@@ -929,7 +979,58 @@
                                     createElement('div', { className: "w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600" })
                                 )
                             ),
-                            isRecurring && createElement('div', { className: "flex gap-2" }, ...recurringButtons)
+                            isRecurring && createElement('div', { className: "space-y-4" },
+                                createElement('div', { className: "flex gap-2" }, ...recurringButtons),
+                                
+                                // 每周选项 - 选择星期几
+                                recurringType === 'weekly' && createElement('div', { className: "bg-gray-50 rounded-lg p-3 mt-2" },
+                                    createElement('p', { className: "text-sm text-gray-600 mb-2" }, '选择星期几:'),
+                                    createElement('div', { className: "flex flex-wrap gap-2" },
+                                        ['日', '一', '二', '三', '四', '五', '六'].map((day, index) => {
+                                            const dayValue = index.toString();
+                                            const isSelected = selectedWeekDays.includes(dayValue);
+                                            return createElement('button', {
+                                                key: dayValue,
+                                                onClick: () => {
+                                                    if (isSelected) {
+                                                        // 至少保留一个选择
+                                                        if (selectedWeekDays.length > 1) {
+                                                            setSelectedWeekDays(selectedWeekDays.filter(d => d !== dayValue));
+                                                        }
+                                                    } else {
+                                                        setSelectedWeekDays([...selectedWeekDays, dayValue]);
+                                                    }
+                                                },
+                                                className: `w-10 h-10 flex items-center justify-center rounded-full transition ${isSelected ? 'bg-purple-600 text-white' : 'bg-white border border-gray-200 text-gray-700'}`
+                                            }, `周${day}`);
+                                        })
+                                    )
+                                ),
+                                
+                                // 每月选项 - 选择日期
+                                recurringType === 'monthly' && createElement('div', { className: "bg-gray-50 rounded-lg p-3 mt-2" },
+                                    createElement('p', { className: "text-sm text-gray-600 mb-2" }, '选择每月几日:'),
+                                    createElement('div', { className: "flex flex-wrap gap-2" },
+                                        Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
+                                            const isSelected = selectedMonthDays.includes(day);
+                                            return createElement('button', {
+                                                key: day,
+                                                onClick: () => {
+                                                    if (isSelected) {
+                                                        // 至少保留一个选择
+                                                        if (selectedMonthDays.length > 1) {
+                                                            setSelectedMonthDays(selectedMonthDays.filter(d => d !== day));
+                                                        }
+                                                    } else {
+                                                        setSelectedMonthDays([...selectedMonthDays, day]);
+                                                    }
+                                                },
+                                                className: `w-10 h-10 flex items-center justify-center rounded-full transition ${isSelected ? 'bg-purple-600 text-white' : 'bg-white border border-gray-200 text-gray-700'}`
+                                            }, day);
+                                        })
+                                    )
+                                )
+                            )
                         ),
                         
                         createElement('div', { className: "flex items-center justify-between border-t py-4" }, createElement('div', { className: "flex items-center gap-2" }, createElement(Icons.Star, { className: "w-6 h-6 text-yellow-500 fill-current" }), '星星'), createElement('input', { type: "number", min: 1, max: 10, value: stars, onChange: (e) => setStars(parseInt(e.target.value) || 1), className: "w-12 text-center border rounded" })),
@@ -956,8 +1057,50 @@
             const [isCongratulateActive, setIsCongratulateActive] = useState(false);
             const [confettiPieces, setConfettiPieces] = useState([]);
             const [competitionWinner, setCompetitionWinner] = useState(null); // 用于竞争任务选择获胜者
+            const [starHistory, setStarHistory] = useState([]);
+            const [showStarEditModal, setShowStarEditModal] = useState(false); // 星星编辑模态框显示状态
+            const [editingMemberId, setEditingMemberId] = useState(null); // 当前编辑星星的成员ID
             
             const getMemberById = (id) => members.find(m => m.id === id);
+            
+            // 记录星星操作历史
+            const recordStarOperation = (memberId, operatorId, starsChange, reason) => {
+                const newRecord = {
+                    id: Date.now().toString(),
+                    memberId,
+                    operatorId,
+                    starsChange,
+                    reason,
+                    date: new Date().toLocaleString('zh-CN')
+                };
+                setStarHistory(prev => [newRecord, ...prev]);
+            };
+            
+            // 打开星星编辑模态框
+            const openStarEditModal = (memberId) => {
+                setEditingMemberId(memberId);
+                setShowStarEditModal(true);
+            };
+            
+            // 保存星星修改
+            const handleStarEditSave = (operatorId, starsChange, reason) => {
+                if (!operatorId) {
+                    alert('请选择操作人');
+                    return false;
+                }
+                
+                setMembers(prev => prev.map(member => 
+                    member.id === editingMemberId 
+                        ? { ...member, stars: Math.max(0, member.stars + starsChange) }
+                        : member
+                ));
+                
+                // 记录操作历史
+                recordStarOperation(editingMemberId, operatorId, starsChange, reason || '手动调整');
+                setShowStarEditModal(false);
+                setEditingMemberId(null);
+                return true;
+            };
 
             // --- 成员 CRUD ---
             const handleAddMember = () => {
@@ -1100,6 +1243,91 @@
             
             const StarBurstEffect = () => createElement('div', { className: "star-burst text-5xl text-yellow-500" }, '✨');
             
+            // 星星编辑模态框组件
+            // StarHistoryView组件已移到全局作用域
+            
+            const StarEditModal = ({ memberId, onClose, onSave, members }) => {
+                const [operatorId, setOperatorId] = useState('');
+                const [starsChange, setStarsChange] = useState(1);
+                const [reason, setReason] = useState('');
+                const member = members.find(m => m.id === memberId);
+                
+                const handleSubmit = (e) => {
+                    e.preventDefault();
+                    const success = onSave(operatorId, parseInt(starsChange), reason || '手动调整');
+                    if (success) {
+                        setOperatorId('');
+                        setStarsChange(1);
+                        setReason('');
+                    }
+                };
+                
+                if (!member) return null;
+                
+                return createElement('div', { className: 'fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50' },
+                    createElement('div', { className: 'bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl' },
+                        createElement('h3', { className: 'text-xl font-bold mb-4' }, `修改 ${member.name} 的星星`),
+                        createElement('form', { onSubmit: handleSubmit },
+                            createElement('div', { className: 'mb-4' },
+                                createElement('label', { className: 'block text-sm font-medium mb-2' }, '操作人 *'),
+                                createElement('select', {
+                                    value: operatorId,
+                                    onChange: (e) => setOperatorId(e.target.value),
+                                    className: 'w-full border rounded-lg p-3 bg-gray-50',
+                                    required: true
+                                },
+                                    createElement('option', { value: '' }, '请选择操作人'),
+                                    members.map(m => createElement('option', { key: m.id, value: m.id }, m.name))
+                                )
+                            ),
+                            createElement('div', { className: 'mb-4' },
+                                createElement('label', { className: 'block text-sm font-medium mb-2' }, '星星变化'),
+                                createElement('div', { className: 'flex gap-2' },
+                                    createElement('select', {
+                                        value: Math.sign(starsChange) === 1 ? 'add' : 'subtract',
+                                        onChange: (e) => {
+                                            const isAdd = e.target.value === 'add';
+                                            setStarsChange(Math.abs(starsChange) * (isAdd ? 1 : -1));
+                                        },
+                                        className: 'flex-1 border rounded-lg p-3 bg-gray-50'
+                                    },
+                                        createElement('option', { value: 'add' }, '+ 添加'),
+                                        createElement('option', { value: 'subtract' }, '- 减少')
+                                    ),
+                                    createElement('input', {
+                                        type: 'number',
+                                        min: 1,
+                                        value: Math.abs(starsChange),
+                                        onChange: (e) => {
+                                            const value = parseInt(e.target.value) || 1;
+                                            setStarsChange(Math.sign(starsChange) * value);
+                                        },
+                                        className: 'flex-1 border rounded-lg p-3 bg-gray-50'
+                                    })
+                                )
+                            ),
+                            createElement('div', { className: 'mb-6' },
+                                createElement('label', { className: 'block text-sm font-medium mb-2' }, '修改原因'),
+                                createElement('input', {
+                                    type: 'text',
+                                    value: reason,
+                                    onChange: (e) => setReason(e.target.value),
+                                    placeholder: '请输入修改原因（可选）',
+                                    className: 'w-full border rounded-lg p-3 bg-gray-50'
+                                })
+                            ),
+                            createElement('div', { className: 'flex gap-3' },
+                                createElement('button', { type: 'button', onClick: onClose, className: 'flex-1 p-3 bg-gray-200 rounded-lg font-medium' }, '取消'),
+                                createElement('button', { type: 'submit', className: 'flex-1 p-3 bg-pink-600 text-white rounded-lg font-medium' }, '确认')
+                            )
+                        )
+                    )
+                );
+            };
+            
+            // 星星操作历史组件
+
+            
             // SVG 恭喜动画组件
             const CongratulateEffect = () => {
                 return createElement('div', { className: "congratulate-popup" },
@@ -1232,7 +1460,7 @@
             };
             
             // --- 奖励视图 ---
-            const RewardView = () => {
+            const RewardView = ({ starHistory, rewardHistory, members, rewards }) => {
                 const [selectedRewardMemberId, setSelectedRewardMemberId] = useState(members[0] ? members[0].id : null);
 
                 if (!selectedRewardMemberId && members.length > 0) {
@@ -1244,14 +1472,50 @@
                 const selectedMember = members.find(m => m.id === selectedRewardMemberId);
                 const memberRewards = rewards.filter(r => r.assignedTo === selectedMember.id);
                 
-                // 筛选当前成员的兑换记录
-                const memberRewardHistory = rewardHistory.filter(h => h.memberId === selectedRewardMemberId);
+                // 整合当前成员的所有星星记录（星星操作历史和兑换记录）
+                const memberStarRecords = [];
                 
-                const memberSelector = members.map(m => createElement('button', {
+                // 添加星星操作历史记录
+                const memberStarHistory = starHistory.filter(h => h.memberId === selectedRewardMemberId);
+                memberStarHistory.forEach(record => {
+                    const operator = members.find(m => m.id === record.operatorId);
+                    memberStarRecords.push({
+                        id: record.id,
+                        type: record.starsChange > 0 ? 'add' : 'subtract',
+                        title: record.starsChange > 0 ? '星星增加' : '星星减少',
+                        description: record.reason || '手动调整',
+                        starsChange: record.starsChange,
+                        operator: operator?.name || '系统',
+                        date: record.date,
+                        icon: record.starsChange > 0 ? '⭐' : '🌙'
+                    });
+                });
+                
+                // 添加兑换记录
+                const memberRewardHistory = rewardHistory.filter(h => h.memberId === selectedRewardMemberId);
+                memberRewardHistory.forEach(record => {
+                    memberStarRecords.push({
+                        id: record.id,
+                        type: 'redeem',
+                        title: '兑换奖励',
+                        description: record.rewardName,
+                        starsChange: -record.cost,
+                        operator: '系统',
+                        date: record.date,
+                        icon: record.icon
+                    });
+                });
+                
+                // 按时间排序，最新的在前
+                memberStarRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
+                
+                const memberSelector = members.map(m => createElement('div', {
                     key: m.id,
+                    className: 'flex-shrink-0'
+                }, createElement('button', {
                     onClick: () => setSelectedRewardMemberId(m.id),
                     className: `px-4 py-2 rounded-full text-sm font-medium transition flex items-center gap-2 ${selectedRewardMemberId === m.id ? `bg-pink-500 text-white shadow-md` : 'bg-gray-100 text-gray-700'}`
-                }, m.avatar, m.name));
+                }, m.avatar, m.name)));
 
                 const rewardList = memberRewards.map(reward => {
                     const progressPercent = Math.min(100, (selectedMember.stars / reward.cost) * 100);
@@ -1279,9 +1543,37 @@
                     );
                 });
 
+                const starRecordList = memberStarRecords.slice(0, 10).map(record => {
+                    let starsColor = 'text-yellow-600';
+                    let description = '';
+                    
+                    if (record.type === 'add') {
+                        starsColor = 'text-yellow-600';
+                        description = `${record.operator}: ${record.description}`;
+                    } else if (record.type === 'subtract') {
+                        starsColor = 'text-red-600';
+                        description = `${record.operator}: ${record.description}`;
+                    } else if (record.type === 'redeem') {
+                        starsColor = 'text-red-600';
+                        description = `兑换了奖励: ${record.description}`;
+                    }
+                    
+                    return createElement('div', { key: record.id, className: "flex items-center gap-3 p-3 bg-gray-50 rounded-lg" },
+                        createElement('div', { className: "w-10 h-10 flex items-center justify-center rounded-lg bg-pink-100 text-2xl" }, record.icon),
+                        createElement('div', { className: "flex-1" },
+                            createElement('p', { className: "font-medium text-gray-800" }, record.title),
+                            createElement('p', { className: "text-xs text-gray-500" }, description),
+                            createElement('p', { className: "text-xs text-gray-400 mt-1" }, record.date)
+                        ),
+                        createElement('div', { className: `text-right font-bold ${starsColor}` }, 
+                            record.starsChange > 0 ? `+${record.starsChange}⭐` : `${record.starsChange}⭐`
+                        )
+                    );
+                });
+
                 return createElement('div', { className: "space-y-6 pb-20" },
                     createElement('h3', { className: "text-xl font-bold" }, '选择成员'),
-                    createElement('div', { className: "flex space-x-3 overflow-x-auto pb-4 scrollbar-hide" }, ...memberSelector),
+                    createElement('div', { className: "flex space-x-3 overflow-x-auto pb-4 scrollbar-hide flex-nowrap whitespace-nowrap" }, ...memberSelector),
 
                     createElement('div', { className: "flex items-center justify-between p-4 bg-white rounded-xl shadow-premium" }, 
                         createElement('h3', { className: "text-xl font-bold" }, `${selectedMember.name} 的星星`),
@@ -1308,28 +1600,15 @@
                             : createElement('p', {className: 'text-gray-500 text-center py-8 bg-white rounded-xl'}, '暂无奖励目标')
                     ),
                     
-                    // 兑换记录 - 仅显示当前成员
+                    // 星星记录 - 整合所有类型的星星操作
                     createElement('h3', { className: "text-xl font-bold flex items-center gap-2 mt-6" }, 
-                        createElement(Icons.List, { className: "w-6 h-6 text-purple-600" }),
-                        `${selectedMember.name} 的兑换记录`
+                        createElement(Icons.Clock, { className: "w-6 h-6 text-purple-600" }),
+                        `${selectedMember.name} 的星星记录`
                     ),
                     createElement('div', { className: "bg-white rounded-xl shadow-premium p-4" },
-                        memberRewardHistory.length > 0 
-                            ? createElement('div', { className: "space-y-3" },
-                                memberRewardHistory.slice(0, 10).map(item => 
-                                    createElement('div', { key: item.id, className: "flex items-center gap-3 p-3 bg-gray-50 rounded-lg" },
-                                        createElement('div', { className: "w-10 h-10 flex items-center justify-center rounded-lg bg-pink-100 text-2xl" }, item.icon),
-                                        createElement('div', { className: "flex-1" },
-                                            createElement('p', { className: "font-medium text-gray-800" }, item.rewardName),
-                                            createElement('p', { className: "text-xs text-gray-500" }, item.date)
-                                        ),
-                                        createElement('div', { className: "text-right" },
-                                            createElement('p', { className: "text-sm font-bold text-red-600" }, `-${item.cost}⭐`)
-                                        )
-                                    )
-                                )
-                            )
-                            : createElement('p', { className: 'text-gray-500 text-center py-6' }, '暂无兑换记录')
+                        memberStarRecords.length > 0 
+                            ? createElement('div', { className: "space-y-3" }, starRecordList)
+                            : createElement('p', { className: 'text-gray-500 text-center py-6' }, '暂无星星记录')
                     ),
                     
                     isAddRewardModalOpen && createElement(AddRewardModal, { onClose: () => setIsAddRewardModalOpen(false), onSave: handleAddReward })
@@ -1362,11 +1641,15 @@
                 
                 createElement('main', { className: "p-4" },
                     activeTab === 'tasks' && createElement(TaskListView, {
-                        tasks, members, getMemberById, selectedDate, setSelectedDate, toggleTask, setIsAddTaskModalOpen
+                        tasks, members, getMemberById, selectedDate, setSelectedDate, toggleTask, setIsAddTaskModalOpen, starHistory
                     }),
-                    activeTab === 'rewards' && createElement(RewardView),
-                    activeTab === 'members' && createElement(MembersView, {
-                        members, handleEditMemberStart, handleDeleteMember, handleAddMember
+                    activeTab === 'rewards' && createElement(RewardView, { starHistory, rewardHistory, members, rewards }),
+                   activeTab === 'members' && createElement(MembersView, {
+                          members, handleEditMemberStart, handleDeleteMember, handleAddMember,
+                          handleEditStars: (memberId) => {
+                              setEditingMemberId(memberId);
+                              setShowStarEditModal(true);
+                          }
                     }),
                     activeTab === 'stats' && createElement(StatsView, { tasks, members, getMemberById }) 
                 ),
@@ -1400,6 +1683,17 @@
                 competitionWinner && createElement(CompetitionWinnerModal, {
                     taskId: competitionWinner,
                     onClose: () => setCompetitionWinner(null)
+                }),
+                
+                // 星星编辑模态框
+                showStarEditModal && createElement(StarEditModal, {
+                    memberId: editingMemberId,
+                    onClose: () => {
+                        setShowStarEditModal(false);
+                        setEditingMemberId(null);
+                    },
+                    onSave: handleStarEditSave,
+                    members
                 }),
 
                 // 底部导航
