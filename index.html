@@ -136,12 +136,14 @@
 
         // --- 2. 模拟初始数据 (简化角色) ---
         const INITIAL_MEMBERS = [
+            { id: 'm3', name: '桃桃', color: 'bg-red-500', text: 'text-red-600', border: 'border-red-500', stars: 12, avatar: '👧' },
             { id: 'm1', name: '爸爸', color: 'bg-blue-500', text: 'text-blue-600', border: 'border-blue-500', stars: 10, avatar: '👨' },
             { id: 'm2', name: '妈妈', color: 'bg-pink-500', text: 'text-pink-600', border: 'border-pink-500', stars: 5, avatar: '👩' },
-            { id: 'm3', name: '桃桃', color: 'bg-red-500', text: 'text-red-600', border: 'border-red-500', stars: 12, avatar: '👧' },
+            { id: 'm6', name: '姑姑', color: 'bg-purple-500', text: 'text-purple-600', border: 'border-purple-500', stars: 7, avatar: '👱‍♀️' },
             { id: 'm4', name: '爷爷', color: 'bg-gray-600', text: 'text-gray-600', border: 'border-gray-600', stars: 8, avatar: '👴' },
             { id: 'm5', name: '奶奶', color: 'bg-gray-500', text: 'text-gray-500', border: 'border-gray-500', stars: 6, avatar: '👵' },
-            { id: 'm6', name: '姑姑', color: 'bg-purple-500', text: 'text-purple-600', border: 'border-purple-500', stars: 7, avatar: '👱‍♀️' },
+            { id: 'm7', name: '姥姥', color: 'bg-orange-500', text: 'text-orange-600', border: 'border-orange-500', stars: 4, avatar: '👵' },
+            { id: 'm8', name: '姥爷', color: 'bg-amber-600', text: 'text-amber-600', border: 'border-amber-600', stars: 9, avatar: '👴' },
         ];
         const INITIAL_TASKS = [
             { id: 't1', title: '起床洗漱', assignedTo: 'm3', date: '2025-11-26', completed: false, stars: 1, priority: 'high', icon: '🪥', taskColor: 'bg-red-100', type: 'individual' },
@@ -319,7 +321,7 @@
                 
                 // 成员筛选 - 优化为支持横向滑动
                 createElement('div', { className: "flex space-x-3 overflow-x-auto pb-4 scrollbar-hide flex-nowrap whitespace-nowrap" }, 
-                    memberSelector.map(button => createElement('div', { className: "flex-shrink-0" }, button))
+                    memberSelector.map((button, index) => createElement('div', { key: `member-selector-${index}`, className: "flex-shrink-0" }, button))
                 ),
                 
                 // 时间筛选
@@ -453,6 +455,7 @@
         const DateSelector = ({ selectedDate, setSelectedDate, tasks }) => {
             const [currentMonthOffset, setCurrentMonthOffset] = useState(0);
             const [isExpanded, setIsExpanded] = useState(false); // 默认收起
+            const [calendarRef, setCalendarRef] = useState(null); // 日历容器引用
             
             const today = new Date('2025-11-26');
             const displayDate = new Date(today.getFullYear(), today.getMonth() + currentMonthOffset, 1);
@@ -490,6 +493,25 @@
                 }
             }, [currentMonthOffset, isExpanded, isTodayInCurrentMonth]);
             
+            // 点击日历外部自动收起
+            React.useEffect(() => {
+                const handleClickOutside = (event) => {
+                    if (isExpanded && calendarRef && !calendarRef.contains(event.target)) {
+                        setIsExpanded(false);
+                    }
+                };
+                
+                if (isExpanded) {
+                    document.addEventListener('mousedown', handleClickOutside);
+                    document.addEventListener('touchstart', handleClickOutside);
+                }
+                
+                return () => {
+                    document.removeEventListener('mousedown', handleClickOutside);
+                    document.removeEventListener('touchstart', handleClickOutside);
+                };
+            }, [isExpanded, calendarRef]);
+            
             // 收起状态:显示横向滑动的日期列表(显示本月所有日期)
             if (!isExpanded) {
                 const daysInMonth = new Date(year, month, 0).getDate();
@@ -525,7 +547,7 @@
                     );
                 }
                 
-                return createElement('div', { className: "bg-white rounded-xl shadow-premium p-3 mb-4" },
+                return createElement('div', { className: "bg-white rounded-xl shadow-premium p-3 mb-4", ref: setCalendarRef },
                     createElement('div', { className: "flex justify-between items-center mb-3" },
                         createElement('div', { className: "flex items-center gap-2" },
                             createElement(Icons.Calendar, { className: "w-5 h-5 text-purple-600" }),
@@ -599,7 +621,7 @@
                 ));
             }
 
-            return createElement('div', { className: "bg-white rounded-xl shadow-premium p-4 mb-4" },
+            return createElement('div', { className: "bg-white rounded-xl shadow-premium p-3 mb-4", ref: setCalendarRef },
                 createElement('div', { className: "flex justify-between items-center mb-3" },
                     createElement('div', { className: "flex items-center gap-2" },
                         createElement(Icons.Calendar, { className: "w-5 h-5 text-purple-600" }),
@@ -852,7 +874,8 @@
             const [recurringType, setRecurringType] = useState('daily'); // daily, weekly, monthly
             const [selectedWeekDays, setSelectedWeekDays] = useState(['1']); // 每周选择的星期几，默认周一
             const [selectedMonthDays, setSelectedMonthDays] = useState([1]); // 每月选择的日期，默认1号
-            const [dateToggle] = useState(true);
+            const [selectedDate, setSelectedDate] = useState(null); // 选中的日期，默认为null
+            const [showDatePicker, setShowDatePicker] = useState(false); // 控制日期选择弹窗显示
 
             const handleToggleMember = (id) => {
                 if (taskType === 'individual') {
@@ -869,7 +892,7 @@
                     id: `t${Date.now()}`,
                     title: title,
                     assignedTo: selectedMembers[0], 
-                    date: dateToggle ? '2025-11-26' : null, 
+                    date: selectedDate, 
                     completed: false,
                     stars: stars,
                     priority: priority,
@@ -893,12 +916,81 @@
                 className: `px-3 py-1 rounded-full text-sm font-medium transition flex items-center gap-2 ${selectedMembers.includes(m.id) ? `${m.color} text-white` : 'bg-gray-100 text-gray-700'}`
             }, m.avatar, m.name, selectedMembers.includes(m.id) ? '✓' : null));
 
+            // 日期选择弹窗组件
+            const DatePickerPopup = () => {
+                const today = new Date('2025-11-26');
+                const year = today.getFullYear();
+                const month = today.getMonth() + 1;
+                
+                const formatDate = (y, m, day) => {
+                    const monthStr = m < 10 ? '0' + m : m;
+                    const dayStr = day < 10 ? '0' + day : day;
+                    return `${y}-${monthStr}-${dayStr}`;
+                };
+                
+                // 生成日期选择器
+                const daysInMonth = new Date(year, month, 0).getDate();
+                const calendarDays = [];
+                
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = formatDate(year, month, day);
+                    const isToday = dateStr === '2025-11-26';
+                    const isSelected = dateStr === selectedDate;
+                    
+                    calendarDays.push(
+                        createElement('button', {
+                            key: day,
+                            onClick: () => {
+                                setSelectedDate(dateStr);
+                                setShowDatePicker(false);
+                            },
+                            className: `w-10 h-10 rounded-full flex items-center justify-center transition-all ${isSelected ? 'bg-purple-600 text-white font-bold' : isToday ? 'bg-green-100 text-green-700' : 'hover:bg-gray-100'}`
+                        }, day)
+                    );
+                }
+                
+                return createElement('div', { className: "fixed z-50 inset-0 bg-black/30 flex items-center justify-center p-4", onClick: () => setShowDatePicker(false) },
+                    createElement('div', { className: "bg-white rounded-xl shadow-xl p-5 max-w-xs w-full", onClick: (e) => e.stopPropagation() },
+                        createElement('div', { className: "flex justify-between items-center mb-4" },
+                            createElement('h3', { className: "text-lg font-bold text-gray-800" }, `${year}年 ${month}月`),
+                            createElement('button', { 
+                                onClick: () => setShowDatePicker(false),
+                                className: "text-gray-500 hover:text-gray-700 p-1"
+                            }, '✕')
+                        ),
+                        createElement('div', { className: "grid grid-cols-7 gap-1 mb-4" },
+                            ['日', '一', '二', '三', '四', '五', '六'].map((day, index) => 
+                                createElement('div', { key: index, className: "text-center text-sm text-gray-500 py-2" }, day)
+                            )
+                        ),
+                        createElement('div', { className: "grid grid-cols-7 gap-1" },
+                            ...calendarDays
+                        ),
+                        createElement('div', { className: "mt-4 flex justify-center" },
+                            createElement('button', {
+                                onClick: () => {
+                                    setSelectedDate(null);
+                                    setShowDatePicker(false);
+                                },
+                                className: "text-sm text-gray-500 hover:text-gray-700 px-3 py-1"
+                            }, '清除日期')
+                        )
+                    )
+                );
+            };
+            
             const timeAndRepeatItems = [
-                { icon: Icons.Calendar, label: '日期', value: '2025-11-26', toggle: dateToggle, setToggle: () => {} },
-                { icon: Icons.Clock, label: '时间', value: '无时间限制', toggle: false, setToggle: () => {} },
-            ].map(item => createElement('div', { key: item.label, className: "flex justify-between items-center py-2" },
-                createElement('div', { className: "flex items-center gap-3" }, createElement(item.icon, { className: "w-6 h-6 text-gray-500" }), item.label, createElement('span', { className: "text-gray-500 text-sm" }, item.value)),
-                createElement('input', { type: "checkbox", checked: item.toggle, onChange: (e) => item.setToggle(e.target.checked), className: "toggle-switch hidden" })
+                { icon: Icons.Calendar, label: '日期', value: selectedDate || '点击选择日期' },
+            ].map(item => createElement('div', { 
+                key: item.label, 
+                className: "flex justify-between items-center py-2 cursor-pointer hover:bg-gray-50 rounded-md px-2 transition-colors",
+                onClick: () => setShowDatePicker(true)
+            },
+                createElement('div', { className: "flex items-center gap-3" }, 
+                    createElement(item.icon, { className: "w-6 h-6 text-gray-500" }), 
+                    item.label, 
+                    createElement('span', { className: "text-gray-500 text-sm" }, item.value)
+                )
             ));
             
             const priorityMap = { low: '低', medium: '中', high: '高' };
@@ -953,6 +1045,9 @@
                         )
                     ),
 
+                    // 日期选择弹窗
+                    showDatePicker && createElement(DatePickerPopup),
+                    
                     // Form Fields
                     createElement('div', { className: "space-y-4" },
                         createElement('div', { className: "border-b pb-4" }, createElement('input', { type: "text", placeholder: "*标题", className: "w-full text-xl font-medium focus:outline-none", value: title, onChange: (e) => setTitle(e.target.value) })),
@@ -1026,7 +1121,7 @@
                             )
                         ),
                         
-                        createElement('div', { className: "flex items-center justify-between border-t py-4" }, createElement('div', { className: "flex items-center gap-2" }, createElement(Icons.Star, { className: "w-6 h-6 text-yellow-500 fill-current" }), '星星'), createElement('input', { type: "number", min: 1, max: 10, value: stars, onChange: (e) => setStars(parseInt(e.target.value) || 1), className: "w-12 text-center border rounded" })),
+                        createElement('div', { className: "flex items-center justify-between border-t py-4" }, createElement('div', { className: "flex items-center gap-2" }, createElement(Icons.Star, { className: "w-6 h-6 text-yellow-500 fill-current" }), '星星'), createElement('input', { type: "number", min: 0, step: 1, value: stars, onChange: function(e) { const value = e.target.value === '' ? '' : parseInt(e.target.value, 10); setStars(value === '' ? 0 : (isNaN(value) ? 0 : value)); }, className: "w-16 text-center border rounded p-2", inputMode: 'numeric', pattern: '[0-9]*' })),
                         createElement('div', { className: "border-t py-4" }, createElement('p', { className: "font-medium mb-3" }, '*任务类型'), createElement('div', { className: "flex gap-2 flex-wrap" }, ...taskTypeButtons)),
                         createElement('div', { className: "border-b py-4" }, createElement('p', { className: "font-medium mb-3" }, '*选择成员'), createElement('div', { className: "flex flex-wrap gap-2" }, ...memberPills)),
                         createElement('div', { className: "border-b py-4" }, createElement('p', { className: "font-medium mb-3" }, '优先级'), createElement('div', { className: "flex gap-4" }, ...priorityButtons))
@@ -1277,7 +1372,7 @@
                                 createElement('label', { className: 'block text-sm font-medium mb-2' }, '星星变化'),
                                 createElement('div', { className: 'flex gap-2' },
                                     createElement('select', {
-                                        value: Math.sign(starsChange) === 1 ? 'add' : 'subtract',
+                                        value: Math.sign(starsChange) >= 0 ? 'add' : 'subtract',
                                         onChange: (e) => {
                                             const isAdd = e.target.value === 'add';
                                             setStarsChange(Math.abs(starsChange) * (isAdd ? 1 : -1));
@@ -1289,13 +1384,15 @@
                                     ),
                                     createElement('input', {
                                         type: 'number',
-                                        min: 1,
+                                        min: '0',
+                                        inputMode: 'numeric',
+                                        pattern: '[0-9]*',
                                         value: Math.abs(starsChange),
-                                        onChange: (e) => {
-                                            const value = parseInt(e.target.value) || 1;
+                                        onChange: function(e) {
+                                            const value = parseInt(e.target.value, 10) || 0;
                                             setStarsChange(Math.sign(starsChange) * value);
                                         },
-                                        className: 'flex-1 border rounded-lg p-3 bg-gray-50'
+                                        className: 'w-full border rounded p-2 flex-1'
                                     })
                                 )
                             ),
@@ -1386,7 +1483,7 @@
             // --- 奖励模态框 ---
             const AddRewardModal = ({ onClose, onSave }) => {
                 const [name, setName] = useState('');
-                const [cost, setCost] = useState(10);
+                const [cost, setCost] = useState(1);
                 const [assignedTo, setAssignedTo] = useState(members[0] ? members[0].id : '');
                 const [icon, setIcon] = useState('🎁');
 
@@ -1435,7 +1532,19 @@
                         ),
                         createElement('div', { className: "mb-3" }, 
                             createElement('label', { className: "block text-sm font-medium mb-1" }, '所需星星数'),
-                            createElement('input', { type: "number", min: 1, value: cost, onChange: (e) => setCost(parseInt(e.target.value) || 1), className: "w-full border rounded p-2" })
+                            createElement('input', { 
+                                type: "number", 
+                                min: 0, 
+                                value: cost, 
+                                onChange: function(e) {
+                                    const inputValue = e.target.value;
+                                    const value = inputValue === '' ? '' : parseInt(inputValue, 10);
+                                    setCost(value === '' ? 0 : (isNaN(value) ? 0 : value));
+                                }, 
+                                className: "w-full border rounded p-2",
+                                inputMode: 'numeric',
+                                pattern: '[0-9]*' 
+                            })
                         ),
                         createElement('div', { className: "mb-4" }, 
                             createElement('label', { className: "block text-sm font-medium mb-1" }, '目标成员'),
