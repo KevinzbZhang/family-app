@@ -722,7 +722,6 @@
                         createElement('div', { className: "flex items-center gap-1" }, ...competitorPills),
                         createElement('button', { 
                             onClick: () => toggleTask(task.id), 
-                            disabled: isCompleted, 
                             className: "transition-transform active:scale-90" 
                         },
                             isCompleted 
@@ -1237,9 +1236,42 @@
 
             const toggleTask = (taskId, selectedWinnerId = null) => {
                 const task = tasks.find(t => t.id === taskId);
-                if (!task || task.completed) return; 
+                if (!task) return;
                 
                 const today = '2025-11-26';
+                
+                // 如果任务已完成，则取消完成状态
+                if (task.completed) {
+                    // 共同任务:从所有参与者那里减去星星
+                    if (task.type === 'collaborative') {
+                        const participants = task.participants || task.competitors || [task.assignedTo];
+                        setTasks(prev => prev.map(t => t.id === taskId ? { 
+                            ...t, 
+                            completed: false, 
+                            completedAt: undefined,
+                            participants: undefined
+                        } : t));
+                        
+                        setMembers(prev => prev.map(m => 
+                            participants.includes(m.id) ? { ...m, stars: Math.max(0, m.stars - task.stars) } : m
+                        ));
+                    } else {
+                        // 个人任务或竞争任务:从获胜者那里减去星星
+                        const winnerId = task.winnerId || task.assignedTo;
+                        
+                        setTasks(prev => prev.map(t => t.id === taskId ? { 
+                            ...t, 
+                            completed: false, 
+                            winnerId: undefined, 
+                            completedAt: undefined
+                        } : t));
+                        
+                        setMembers(prev => prev.map(m => 
+                            m.id === winnerId ? { ...m, stars: Math.max(0, m.stars - task.stars) } : m
+                        ));
+                    }
+                    return;
+                }
                 
                 // 竞争任务:需要选择获胜者
                 if (task.type === 'competition' && !selectedWinnerId) {
@@ -1336,16 +1368,20 @@
             
             const StarEditModal = ({ memberId, onClose, onSave, members }) => {
                 const [operatorId, setOperatorId] = useState('');
-                const [starsChange, setStarsChange] = useState(1);
+                const [starInput, setStarInput] = useState('1');
                 const [reason, setReason] = useState('');
+                const [isAdd, setIsAdd] = useState(true);
                 const member = members.find(m => m.id === memberId);
                 
                 const handleSubmit = (e) => {
                     e.preventDefault();
-                    const success = onSave(operatorId, parseInt(starsChange), reason || '手动调整');
+                    const numVal = parseInt(starInput, 10);
+                    const finalChange = (isNaN(numVal) ? 0 : numVal) * (isAdd ? 1 : -1);
+                    
+                    const success = onSave(operatorId, finalChange, reason || '手动调整');
                     if (success) {
                         setOperatorId('');
-                        setStarsChange(1);
+                        setStarInput('1');
                         setReason('');
                     }
                 };
@@ -1372,11 +1408,8 @@
                                 createElement('label', { className: 'block text-sm font-medium mb-2' }, '星星变化'),
                                 createElement('div', { className: 'flex gap-2' },
                                     createElement('select', {
-                                        value: Math.sign(starsChange) >= 0 ? 'add' : 'subtract',
-                                        onChange: (e) => {
-                                            const isAdd = e.target.value === 'add';
-                                            setStarsChange(Math.abs(starsChange) * (isAdd ? 1 : -1));
-                                        },
+                                        value: isAdd ? 'add' : 'subtract',
+                                        onChange: (e) => setIsAdd(e.target.value === 'add'),
                                         className: 'flex-1 border rounded-lg p-3 bg-gray-50'
                                     },
                                         createElement('option', { value: 'add' }, '+ 添加'),
@@ -1384,15 +1417,14 @@
                                     ),
                                     createElement('input', {
                                         type: 'number',
-                                        min: '0',
+                                        min: 0,
+                                        step: 1,
+                                        value: starInput,
+                                        onChange: (e) => setStarInput(e.target.value),
+                                        className: 'w-full border rounded p-2 flex-1',
                                         inputMode: 'numeric',
                                         pattern: '[0-9]*',
-                                        value: Math.abs(starsChange),
-                                        onChange: function(e) {
-                                            const value = parseInt(e.target.value, 10) || 0;
-                                            setStarsChange(Math.sign(starsChange) * value);
-                                        },
-                                        className: 'w-full border rounded p-2 flex-1'
+                                        required: true
                                     })
                                 )
                             ),
@@ -1423,7 +1455,7 @@
                 return createElement('div', { className: "congratulate-popup" },
                     createElement('div', { className: "bg-white rounded-3xl p-8 shadow-2xl text-center" },
                         createElement('div', { className: "text-6xl mb-4" }, '🎉'),
-                        createElement('h2', { className: "text-3xl font-bold text-purple-600 mb-2" }, '恭喜完成！'),
+                        createElement('h2', { className: "text-3xl font-bold text-purple-600 mb-2 whitespace-nowrap" }, '恭喜完成！'),
                         createElement('p', { className: "text-gray-600" }, '太棒了，继续加油！'),
                         createElement('div', { className: "mt-4" },
                             createElement('svg', { width: "100", height: "100", viewBox: "0 0 100 100", className: "mx-auto" },
